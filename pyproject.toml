@@ -4,12 +4,30 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "magicbrain"
-version = "0.1.0"
+version = "0.2.0"
 description = "Spiking DNA-based brain with structural plasticity"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
     "numpy>=1.24.0",
+]
+
+[project.optional-dependencies]
+jax = [
+    "jax>=0.4.0",
+    "jaxlib>=0.4.0",
+]
+viz = [
+    "matplotlib>=3.5.0",
+    "plotly>=5.0.0",
+]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.1.0",
+]
+all = [
+    "magicbrain[jax,viz,dev]",
 ]
 
 [project.scripts]
