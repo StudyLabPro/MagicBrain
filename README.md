@@ -61,6 +61,30 @@ pip install -e ".[dev]"
 pytest
 ```
 
+### REST API
+
+MagicBrain включает FastAPI сервис для удалённого управления моделями:
+
+```bash
+# Запуск API сервера
+cd api
+python main.py
+
+# Или с uvicorn в production
+uvicorn app.api.main:app --host 0.0.0.0 --port 8001
+```
+
+API доступен по адресу: `http://localhost:8001/docs`
+
+**Основные эндпоинты:**
+- `POST /api/v1/models/` - Создание модели
+- `POST /api/v1/models/{model_id}/train` - Обучение
+- `POST /api/v1/models/{model_id}/generate` - Генерация текста
+- `GET /api/v1/models/{model_id}` - Информация о модели
+- `DELETE /api/v1/models/{model_id}` - Удаление модели
+
+Подробная документация: [`api/README_API.md`](./api/README_API.md)
+
 ---
 
 ## 🎯 Quick Start
