@@ -66,17 +66,73 @@ class KnowledgeBaseClient:
 
     def _load_twin_from_kb(self, student_id: str) -> Optional[NeuralDigitalTwin]:
         """
-        Load twin state from KnowledgeBase.
+        Load twin state from KnowledgeBase API.
+
+        Makes synchronous HTTP call to retrieve stored twin state.
+        Uses graceful degradation - returns None on any error.
 
         Args:
             student_id: Student ID
 
         Returns:
-            Twin or None if not found
+            Twin or None if not found/error
         """
-        # TODO: Implement actual API call
-        # For now, return None (will create new twin)
-        return None
+        try:
+            # Use httpx for synchronous HTTP call
+            headers = {}
+            if self.api_key:
+                headers["Authorization"] = f"Bearer {self.api_key}"
+
+            with httpx.Client(timeout=5.0) as client:
+                response = client.get(
+                    f"{self.base_url}/api/v1/neural-twins/{student_id}",
+                    headers=headers,
+                )
+
+                if response.status_code == 404:
+                    # Twin not found - normal case, will create new
+                    return None
+
+                response.raise_for_status()
+                data = response.json()
+
+                # Reconstruct twin from API data
+                twin = NeuralDigitalTwin(
+                    student_id=student_id,
+                    learning_style=data.get("learning_style", "adaptive"),
+                )
+
+                # Restore state
+                if "mastery_scores" in data:
+                    twin.mastery_scores = data["mastery_scores"]
+
+                if "topic_neurons" in data:
+                    twin.topic_neurons = data["topic_neurons"]
+
+                # Restore last practice times
+                if "last_practice" in data:
+                    from datetime import datetime
+                    twin.last_practice = {
+                        k: datetime.fromisoformat(v)
+                        for k, v in data["last_practice"].items()
+                    }
+
+                return twin
+
+        except httpx.TimeoutException:
+            # Timeout - graceful degradation
+            print(f"Warning: Timeout loading twin for {student_id}")
+            return None
+
+        except httpx.HTTPError as e:
+            # HTTP error - graceful degradation
+            print(f"Warning: HTTP error loading twin: {e}")
+            return None
+
+        except Exception as e:
+            # Unexpected error - graceful degradation
+            print(f"Warning: Failed to load twin from KB: {e}")
+            return None
 
     async def sync_mastery_scores(
         self,

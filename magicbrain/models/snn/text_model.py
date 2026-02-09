@@ -254,7 +254,7 @@ class SNNTextModel(StatefulModel):
             path: Path to load file
         """
         from ...io import load_model
-        loaded_brain, _ = load_model(path)
+        loaded_brain, _, _, _ = load_model(path)
 
         # Copy weights
         self.brain.w_slow = loaded_brain.w_slow.copy()

@@ -57,7 +57,7 @@ async def get_diagnostics(model_id: str):
             detail=f"Model {model_id} not found"
         )
 
-    brain, stoi, itos = load_model(str(model_path))
+    brain, stoi, itos, _ = load_model(str(model_path))
 
     return ModelDiagnostics(
         model_id=model_id,
@@ -90,7 +90,7 @@ async def get_weight_stats(model_id: str):
             detail=f"Model {model_id} not found"
         )
 
-    brain, _, _ = load_model(str(model_path))
+    brain, _, _, _ = load_model(str(model_path))
 
     analyzer = SynapticAnalyzer()
     stats = analyzer.analyze_weights(brain)
@@ -125,7 +125,7 @@ async def get_activity_metrics(model_id: str):
             detail=f"Model {model_id} not found"
         )
 
-    brain, _, _ = load_model(str(model_path))
+    brain, _, _, _ = load_model(str(model_path))
 
     # Compute metrics
     firing_rate = float(np.mean(brain.a))

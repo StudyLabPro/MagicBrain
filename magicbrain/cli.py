@@ -82,7 +82,7 @@ def main():
 
         if args.load:
             print(f"Loading model from {args.load}...")
-            brain, stoi, itos = load_model(args.load)
+            brain, stoi, itos, _ = load_model(args.load)
         else:
             print(f"Creating new brain with genome: {args.genome}")
             stoi, itos = build_vocab(text)
@@ -96,7 +96,7 @@ def main():
 
     elif args.command == "sample":
         print(f"Loading model from {args.model}...")
-        brain, stoi, itos = load_model(args.model)
+        brain, stoi, itos, _ = load_model(args.model)
         
         print(f"Sampling with seed='{args.seed}'...")
         out = sample(brain, stoi, itos, args.seed, n=args.n, temperature=args.temp)

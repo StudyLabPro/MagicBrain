@@ -63,7 +63,7 @@ def train_model_task(job_id: str, model_id: str, text: str, steps: int, learning
             training_jobs[job_id]["message"] = "Model not found"
             return
 
-        brain, stoi, itos = load_model(str(model_path))
+        brain, stoi, itos, _ = load_model(str(model_path))
 
         # Build vocab from text
         text_stoi, text_itos = build_vocab(text)

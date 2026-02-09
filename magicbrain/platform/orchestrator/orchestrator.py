@@ -366,25 +366,66 @@ class ModelOrchestrator:
         """
         Execute all models in parallel on same input.
 
+        Uses true async parallel execution with asyncio.gather().
+
         Returns aggregated outputs.
         """
         with self._lock:
             if not self._nodes:
                 raise OrchestratorError("No models in orchestrator")
 
-            outputs = {}
-            models_executed = []
-
-            # Execute all models in parallel (synchronously for now)
-            # TODO: Implement true async parallel execution
-            for model_id, node in self._nodes.items():
-                output = node.model.forward(input_data)
-                outputs[model_id] = output
-                node.last_output = output
-                node.execution_count += 1
-                models_executed.append(model_id)
+            # Run async execution
+            outputs, models_executed = asyncio.run(
+                self._async_execute_parallel(input_data)
+            )
 
             return outputs, models_executed
+
+    async def _async_execute_parallel(
+        self,
+        input_data: Any
+    ) -> Tuple[Dict[str, Any], List[str]]:
+        """
+        Async implementation of parallel execution.
+
+        Executes all models concurrently using asyncio.gather().
+        Handles exceptions gracefully - one model failure doesn't break others.
+
+        Args:
+            input_data: Input for all models
+
+        Returns:
+            Tuple of (outputs dict, executed model IDs)
+        """
+        # Create tasks for all models
+        tasks = []
+        model_ids = []
+
+        for model_id, node in self._nodes.items():
+            task = node.model.async_forward(input_data)
+            tasks.append(task)
+            model_ids.append(model_id)
+
+        # Execute in parallel, collecting exceptions
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Collect outputs
+        outputs = {}
+        models_executed = []
+
+        for model_id, result in zip(model_ids, results):
+            if isinstance(result, Exception):
+                # Model failed - log but continue
+                print(f"Warning: Model {model_id} failed: {result}")
+                continue
+
+            node = self._nodes[model_id]
+            outputs[model_id] = result
+            node.last_output = result
+            node.execution_count += 1
+            models_executed.append(model_id)
+
+        return outputs, models_executed
 
     def _execute_pipeline(
         self,

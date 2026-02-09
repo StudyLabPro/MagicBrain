@@ -36,9 +36,12 @@ class ModelListResponse(BaseModel):
 
 
 @router.get("/", response_model=ModelListResponse)
-async def list_models():
+async def list_models(load_metadata: bool = False):
     """
     List all available models.
+
+    Args:
+        load_metadata: If True, load full metadata (slower). Default False for fast listing.
 
     Returns list of trained models in storage.
     """
@@ -50,14 +53,45 @@ async def list_models():
         # Get file info
         stat = model_file.stat()
 
-        models.append(ModelInfo(
-            model_id=model_file.stem,
-            genome="unknown",  # Would need to load to get
-            vocab_size=0,
-            created_at=str(stat.st_ctime),
-            size_bytes=stat.st_size,
-            metadata={}
-        ))
+        if load_metadata:
+            # Load full metadata (slower but complete)
+            try:
+                from magicbrain.io import load_model
+                _, _, _, metadata = load_model(str(model_file))
+
+                models.append(ModelInfo(
+                    model_id=model_file.stem,
+                    genome=metadata.get("genome_str", "unknown"),
+                    vocab_size=metadata.get("vocab_size", 0),
+                    created_at=str(stat.st_ctime),
+                    size_bytes=stat.st_size,
+                    metadata={
+                        "steps": metadata.get("step", 0),
+                        "N": metadata.get("N", 0),
+                        "K": metadata.get("K", 0),
+                        "timestamp": metadata.get("timestamp", 0),
+                    }
+                ))
+            except Exception:
+                # If loading fails, use minimal info
+                models.append(ModelInfo(
+                    model_id=model_file.stem,
+                    genome="error",
+                    vocab_size=0,
+                    created_at=str(stat.st_ctime),
+                    size_bytes=stat.st_size,
+                    metadata={"error": "failed_to_load"}
+                ))
+        else:
+            # Fast listing without loading models
+            models.append(ModelInfo(
+                model_id=model_file.stem,
+                genome="unknown",
+                vocab_size=0,
+                created_at=str(stat.st_ctime),
+                size_bytes=stat.st_size,
+                metadata={}
+            ))
 
     return ModelListResponse(
         models=models,
@@ -86,16 +120,31 @@ async def get_model(model_id: str):
 
     stat = model_path.stat()
 
-    # TODO: Load model metadata from file
+    # Load model metadata from file
+    try:
+        from magicbrain.io import load_model
 
-    return ModelInfo(
-        model_id=model_id,
-        genome="unknown",
-        vocab_size=0,
-        created_at=str(stat.st_ctime),
-        size_bytes=stat.st_size,
-        metadata={}
-    )
+        # Load model to extract metadata (only reads, doesn't modify)
+        _, _, _, metadata = load_model(str(model_path))
+
+        return ModelInfo(
+            model_id=model_id,
+            genome=metadata.get("genome_str", "unknown"),
+            vocab_size=metadata.get("vocab_size", 0),
+            created_at=str(stat.st_ctime),
+            size_bytes=stat.st_size,
+            metadata={
+                "steps": metadata.get("step", 0),
+                "N": metadata.get("N", 0),
+                "K": metadata.get("K", 0),
+                "timestamp": metadata.get("timestamp", 0),
+            }
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to load model metadata: {str(e)}"
+        )
 
 
 @router.post("/", response_model=ModelInfo, status_code=status.HTTP_201_CREATED)

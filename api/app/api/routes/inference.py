@@ -63,7 +63,7 @@ async def sample_text(request: SampleRequest):
             detail=f"Model {request.model_id} not found"
         )
 
-    brain, stoi, itos = load_model(str(model_path))
+    brain, stoi, itos, _ = load_model(str(model_path))
 
     # Generate
     generated = sample(
@@ -106,7 +106,7 @@ async def predict_next(request: PredictRequest):
             detail=f"Model {request.model_id} not found"
         )
 
-    brain, stoi, itos = load_model(str(model_path))
+    brain, stoi, itos, _ = load_model(str(model_path))
 
     # Get last character
     if not request.context:

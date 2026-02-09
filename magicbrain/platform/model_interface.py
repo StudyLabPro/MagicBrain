@@ -114,6 +114,24 @@ class ModelInterface(ABC):
         """
         pass
 
+    async def async_forward(self, input: Any, **kwargs) -> Any:
+        """
+        Async forward pass (optional).
+
+        Default implementation runs sync forward in executor.
+        Override for true async models (e.g., API-based models).
+
+        Args:
+            input: Input data
+            **kwargs: Additional parameters
+
+        Returns:
+            Model output (awaitable)
+        """
+        import asyncio
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, lambda: self.forward(input, **kwargs))
+
     @abstractmethod
     def get_output_type(self) -> OutputType:
         """

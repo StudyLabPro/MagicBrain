@@ -431,7 +431,7 @@ class NeuralDigitalTwin:
 
         # Load brain
         brain_path = filepath.replace(".json", "_brain.npz")
-        brain, stoi, itos = load_model(brain_path)
+        brain, stoi, itos, _ = load_model(brain_path)
         twin.brain = brain
         twin.genome = metadata["genome"]
 
