@@ -69,6 +69,38 @@ def main():
     monitor_parser.add_argument("--metrics", type=str, default="metrics.json",
                                help="Output file for metrics")
 
+    # NEUROGENESIS
+    ng_parser = subparsers.add_parser("neurogenesis", help="NeuroGenesis Engine: dataset-driven genome compilation")
+    ng_sub = ng_parser.add_subparsers(dest="ng_command", required=True)
+
+    # neurogenesis compile
+    ng_compile = ng_sub.add_parser("compile", help="Compile dataset into genome")
+    ng_compile.add_argument("--text", type=str, help="Path to text file")
+    ng_compile.add_argument("--strategy", type=str, default="statistical",
+                            choices=["hash", "statistical", "hybrid"],
+                            help="Compilation strategy")
+    ng_compile.add_argument("--length", type=int, default=28, help="Genome length")
+
+    # neurogenesis run
+    ng_run = ng_sub.add_parser("run", help="Full pipeline: compile -> develop -> train -> reconstruct")
+    ng_run.add_argument("--text", type=str, help="Path to text file")
+    ng_run.add_argument("--strategy", type=str, default="statistical",
+                        choices=["hash", "statistical", "hybrid"])
+    ng_run.add_argument("--steps", type=int, default=10000)
+    ng_run.add_argument("--cppn", action="store_true", help="Use CPPN for weight generation")
+    ng_run.add_argument("--out", type=str, default="model.npz", help="Output model path")
+
+    # neurogenesis benchmark
+    ng_bench = ng_sub.add_parser("benchmark", help="Benchmark strategies against baselines")
+    ng_bench.add_argument("--text", type=str, help="Path to text file")
+    ng_bench.add_argument("--steps", type=int, default=5000)
+    ng_bench.add_argument("--trials", type=int, default=3)
+
+    # neurogenesis attractors
+    ng_attr = ng_sub.add_parser("attractors", help="Discover attractors in a trained model")
+    ng_attr.add_argument("--model", type=str, required=True, help="Path to trained model")
+    ng_attr.add_argument("--probes", type=int, default=500, help="Number of random probes")
+
     args = parser.parse_args()
 
     if args.command == "train":
@@ -220,6 +252,87 @@ def main():
         print(f"  Recent avg loss: {summary['recent_avg_loss']:.4f}")
         print(f"  Recent avg dopamine: {summary['recent_avg_dopamine']:.3f}")
         print(f"  Recent avg firing rate: {summary['recent_avg_firing_rate']:.3f}")
+
+    elif args.command == "neurogenesis":
+        from .neurogenesis.compiler import GenomeCompiler, analyze_dataset
+        from .neurogenesis.reconstruction import ReconstructionOperator
+        from .neurogenesis.attractor_dynamics import AttractorDynamics
+
+        if args.ng_command == "compile":
+            text = DEFAULT_TEXT
+            if args.text:
+                with open(args.text, "r", encoding="utf-8") as f:
+                    text = f.read()
+            text = " ".join(text.split())
+
+            compiler = GenomeCompiler()
+            result = compiler.compile_with_metadata(
+                text, strategy=args.strategy, genome_length=args.length,
+            )
+
+            print(f"Strategy: {result['strategy']}")
+            print(f"Data: {result['data_size']} bytes, "
+                  f"vocab={result['stats']['vocab_size']}, "
+                  f"entropy={result['stats']['entropy']:.2f}")
+            print(f"Hash: {result['data_hash'][:16]}...")
+            print(f"Genome: {result['genome']}")
+
+        elif args.ng_command == "run":
+            from .tasks.neurogenesis_task import run_neurogenesis_pipeline
+
+            text = DEFAULT_TEXT
+            if args.text:
+                with open(args.text, "r", encoding="utf-8") as f:
+                    text = f.read()
+            text = " ".join(text.split())
+
+            result = run_neurogenesis_pipeline(
+                text,
+                strategy=args.strategy,
+                steps=args.steps,
+                use_cppn=args.cppn,
+                verbose=True,
+            )
+
+            # Save model
+            stoi, itos = build_vocab(text)
+            print(f"\nSaving model to {args.out}...")
+            save_model(result.brain, stoi, itos, args.out)
+
+            print(f"\nGenome: {result.genome}")
+            print(f"Final loss: {result.final_loss:.4f}")
+
+        elif args.ng_command == "benchmark":
+            from .tasks.neurogenesis_task import run_benchmark
+
+            text = DEFAULT_TEXT
+            if args.text:
+                with open(args.text, "r", encoding="utf-8") as f:
+                    text = f.read()
+            text = " ".join(text.split())
+
+            run_benchmark(
+                text,
+                steps=args.steps,
+                trials=args.trials,
+                verbose=True,
+            )
+
+        elif args.ng_command == "attractors":
+            brain, stoi, itos, meta = load_model(args.model)
+            print(f"Model loaded: N={brain.N}, K={brain.K}, step={brain.step}")
+
+            recon = ReconstructionOperator()
+            print(f"\nSearching for attractors ({args.probes} probes)...")
+
+            decodings = recon.reconstruct_from_attractors(
+                brain, itos, n_probes=args.probes,
+            )
+
+            print(f"\nFound {len(decodings)} unique attractors:")
+            for dec in decodings[:20]:
+                print(f"  #{dec.attractor_index}: token='{dec.token}' "
+                      f"conf={dec.confidence:.3f} energy={dec.energy:.4f}")
 
 if __name__ == "__main__":
     main()

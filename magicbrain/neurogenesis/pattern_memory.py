@@ -1,0 +1,341 @@
+"""Pattern Memory: Hopfield-style associative memory with Storkey learning rule.
+
+Stores patterns as attractors in the weight matrix. Each pattern becomes
+a fixed point of the network dynamics.
+
+The Storkey rule provides higher capacity (~0.14N patterns) than the
+classic Hebbian rule (~0.14N / sqrt(log N)).
+
+Pipeline:
+  1. Convert text tokens to sparse neural patterns
+  2. Imprint patterns into weight matrix using Storkey rule
+  3. Recall via attractor convergence from partial cue
+"""
+
+from __future__ import annotations
+
+from typing import NamedTuple
+
+import numpy as np
+
+
+class ImprintResult(NamedTuple):
+    """Result of pattern imprinting."""
+    n_patterns: int
+    weight_matrix: np.ndarray  # (N, N) dense weight matrix
+    patterns: np.ndarray       # (M, N) stored patterns
+    capacity_ratio: float      # patterns / theoretical_max
+
+
+class RecallResult(NamedTuple):
+    """Result of pattern recall."""
+    recalled_pattern: np.ndarray
+    matched_index: int       # index of closest stored pattern (-1 if none)
+    similarity: float        # cosine similarity to best match
+    iterations: int
+    converged: bool
+
+
+class PatternMemory:
+    """Hopfield-style associative memory with Storkey learning.
+
+    Stores binary-like patterns as attractors and retrieves them
+    from partial/noisy cues via dynamics convergence.
+    """
+
+    def __init__(
+        self,
+        N: int,
+        sparsity: float = 0.1,
+        max_capacity_fraction: float = 0.12,
+    ):
+        """Initialize pattern memory.
+
+        Args:
+            N: Number of neurons.
+            sparsity: Target fraction of active neurons per pattern.
+            max_capacity_fraction: Max patterns as fraction of N (safety limit).
+        """
+        self.N = N
+        self.sparsity = sparsity
+        self.max_patterns = int(N * max_capacity_fraction)
+
+        self.W = np.zeros((N, N), dtype=np.float32)
+        self.patterns: list[np.ndarray] = []
+
+    def text_to_pattern(
+        self,
+        token_ids: list[int],
+        vocab_size: int,
+        rng: np.random.Generator | None = None,
+    ) -> np.ndarray:
+        """Convert a sequence of token IDs to a sparse neural pattern.
+
+        Uses a deterministic hash-like mapping: token sequence -> neuron subset.
+
+        Args:
+            token_ids: Sequence of token indices.
+            vocab_size: Size of vocabulary.
+            rng: Optional RNG (if None, uses deterministic mapping).
+
+        Returns:
+            Sparse binary pattern (N,).
+        """
+        pattern = np.zeros(self.N, dtype=np.float32)
+        n_active = max(1, int(self.N * self.sparsity))
+
+        # Deterministic: hash token sequence to select active neurons
+        seed_val = 0
+        for i, tid in enumerate(token_ids):
+            seed_val = (seed_val * 31 + tid + i * 7) & 0x7FFFFFFF
+
+        pat_rng = np.random.default_rng(seed_val)
+        active_indices = pat_rng.choice(self.N, size=n_active, replace=False)
+        pattern[active_indices] = 1.0
+
+        return pattern
+
+    def imprint_pattern(self, pattern: np.ndarray) -> bool:
+        """Imprint a single pattern using Storkey learning rule.
+
+        The Storkey rule:
+          dW_ij = (1/N) * (p_i * p_j - p_i * h_j - h_i * p_j)
+        where h_i = sum_{k!=i,j} W_ik * p_k
+
+        Args:
+            pattern: Binary-like pattern to store (N,).
+
+        Returns:
+            True if successfully stored, False if at capacity.
+        """
+        if len(self.patterns) >= self.max_patterns:
+            return False
+
+        # Convert to bipolar for Hopfield dynamics
+        p = (2.0 * pattern - 1.0).astype(np.float32)
+
+        # Compute local fields from existing weights
+        h = self.W @ p  # (N,)
+
+        # Storkey update
+        N = float(self.N)
+        for i in range(self.N):
+            for j in range(i + 1, self.N):
+                # h without contributions from i and j
+                h_i = h[i] - self.W[i, j] * p[j] - self.W[i, i] * p[i]
+                h_j = h[j] - self.W[j, i] * p[i] - self.W[j, j] * p[j]
+
+                dw = (p[i] * p[j] - p[i] * h_j - h_i * p[j]) / N
+                self.W[i, j] += dw
+                self.W[j, i] += dw
+
+        # Zero diagonal
+        np.fill_diagonal(self.W, 0.0)
+
+        self.patterns.append(pattern.copy())
+        return True
+
+    def imprint_patterns_batch(self, patterns: np.ndarray) -> ImprintResult:
+        """Imprint multiple patterns efficiently.
+
+        Uses vectorized Storkey rule for batch imprinting.
+
+        Args:
+            patterns: Array of patterns (M, N).
+
+        Returns:
+            ImprintResult with weight matrix and metadata.
+        """
+        M = patterns.shape[0]
+
+        # Vectorized Storkey: for each pattern
+        for m in range(min(M, self.max_patterns)):
+            self._imprint_fast(patterns[m])
+            self.patterns.append(patterns[m].copy())
+
+        stored = min(M, self.max_patterns)
+        capacity_ratio = stored / max(1, self.max_patterns)
+
+        return ImprintResult(
+            n_patterns=stored,
+            weight_matrix=self.W.copy(),
+            patterns=np.array(self.patterns),
+            capacity_ratio=capacity_ratio,
+        )
+
+    def _imprint_fast(self, pattern: np.ndarray):
+        """Fast (vectorized) single-pattern Storkey imprinting.
+
+        Internally converts 0/1 patterns to bipolar (-1/+1) for proper
+        Hopfield dynamics, then stores weights in bipolar space.
+        """
+        # Convert to bipolar: 0 -> -1, 1 -> +1
+        p = (2.0 * pattern - 1.0).astype(np.float32).reshape(-1, 1)
+        N = float(self.N)
+
+        # h_i = sum_k W_ik * p_k
+        h = (self.W @ p.ravel()).reshape(-1, 1)
+
+        # Outer product: p_i * p_j
+        pp = p @ p.T
+
+        # p_i * h_j and h_i * p_j
+        ph = p @ h.T
+        hp = h @ p.T
+
+        dW = (pp - ph - hp) / N
+
+        # Symmetrize and zero diagonal
+        dW = 0.5 * (dW + dW.T)
+        np.fill_diagonal(dW, 0.0)
+
+        self.W += dW.astype(np.float32)
+
+    def recall(
+        self,
+        cue: np.ndarray,
+        max_iterations: int = 100,
+        tolerance: float = 1e-4,
+        tau: float = 0.5,
+    ) -> RecallResult:
+        """Recall a stored pattern from a (possibly noisy/partial) cue.
+
+        Runs synchronous Hopfield dynamics until convergence.
+
+        Args:
+            cue: Initial state (noisy/partial version of stored pattern).
+            max_iterations: Max dynamics steps.
+            tolerance: Convergence threshold.
+            tau: Temperature for sigmoid activation.
+
+        Returns:
+            RecallResult with recalled pattern and match info.
+        """
+        # Convert cue to bipolar (-1/+1) for dynamics
+        state = (2.0 * cue - 1.0).astype(np.float32)
+
+        for it in range(max_iterations):
+            prev = state.copy()
+
+            # Compute local field
+            h = self.W @ state
+
+            # Tanh activation (bipolar Hopfield)
+            new_state = np.tanh(np.clip(h / tau, -20, 20)).astype(np.float32)
+
+            # Momentum mixing
+            state = (0.3 * prev + 0.7 * new_state).astype(np.float32)
+
+            delta = float(np.max(np.abs(state - prev)))
+            if delta < tolerance:
+                break
+
+        # Convert back to 0/1 for comparison
+        state_binary = ((state + 1.0) / 2.0).astype(np.float32)
+        state_binary = np.clip(state_binary, 0.0, 1.0)
+
+        # Find closest stored pattern
+        best_idx = -1
+        best_sim = -1.0
+        for i, pat in enumerate(self.patterns):
+            sim = _cosine_similarity(state_binary, pat)
+            if sim > best_sim:
+                best_sim = sim
+                best_idx = i
+
+        return RecallResult(
+            recalled_pattern=state_binary,
+            matched_index=best_idx,
+            similarity=best_sim,
+            iterations=it + 1,
+            converged=delta < tolerance if max_iterations > 0 else False,
+        )
+
+    def recall_all_patterns(
+        self, noise_level: float = 0.0, rng: np.random.Generator | None = None
+    ) -> list[RecallResult]:
+        """Try to recall all stored patterns.
+
+        Args:
+            noise_level: Add noise to cues to test robustness.
+            rng: Random number generator for noise.
+
+        Returns:
+            List of RecallResult for each stored pattern.
+        """
+        if rng is None:
+            rng = np.random.default_rng(42)
+
+        results = []
+        for pat in self.patterns:
+            cue = pat.copy()
+            if noise_level > 0:
+                # Flip some bits for noise
+                flip_mask = rng.random(self.N) < noise_level
+                cue[flip_mask] = 1.0 - cue[flip_mask]
+            result = self.recall(cue)
+            results.append(result)
+        return results
+
+    def capacity_test(
+        self,
+        rng: np.random.Generator | None = None,
+        step: int = 5,
+    ) -> dict:
+        """Test memory capacity by imprinting increasing numbers of patterns.
+
+        Returns dict with capacity curve (n_patterns -> recall_accuracy).
+        """
+        if rng is None:
+            rng = np.random.default_rng(42)
+
+        # Fresh memory for testing
+        test_mem = PatternMemory(self.N, self.sparsity, max_capacity_fraction=0.2)
+
+        n_active = max(1, int(self.N * self.sparsity))
+        results = {}
+
+        for n_patterns in range(step, self.max_patterns + step, step):
+            # Generate random patterns
+            test_mem.W.fill(0.0)
+            test_mem.patterns.clear()
+
+            patterns = np.zeros((n_patterns, self.N), dtype=np.float32)
+            for i in range(n_patterns):
+                active = rng.choice(self.N, size=n_active, replace=False)
+                patterns[i, active] = 1.0
+                test_mem._imprint_fast(patterns[i])
+                test_mem.patterns.append(patterns[i])
+
+            # Test recall
+            correct = 0
+            for i in range(n_patterns):
+                result = test_mem.recall(patterns[i])
+                if result.matched_index == i and result.similarity > 0.8:
+                    correct += 1
+
+            accuracy = correct / n_patterns
+            results[n_patterns] = accuracy
+
+            if accuracy < 0.5:
+                break
+
+        return results
+
+    @property
+    def n_stored(self) -> int:
+        return len(self.patterns)
+
+    @property
+    def theoretical_capacity(self) -> int:
+        """Theoretical Storkey capacity: ~0.14 * N."""
+        return int(0.14 * self.N)
+
+
+def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
+    """Cosine similarity between two vectors."""
+    norm_a = np.linalg.norm(a)
+    norm_b = np.linalg.norm(b)
+    if norm_a < 1e-9 or norm_b < 1e-9:
+        return 0.0
+    return float(np.dot(a, b) / (norm_a * norm_b))
