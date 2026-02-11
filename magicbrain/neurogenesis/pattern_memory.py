@@ -111,27 +111,8 @@ class PatternMemory:
         if len(self.patterns) >= self.max_patterns:
             return False
 
-        # Convert to bipolar for Hopfield dynamics
-        p = (2.0 * pattern - 1.0).astype(np.float32)
-
-        # Compute local fields from existing weights
-        h = self.W @ p  # (N,)
-
-        # Storkey update
-        N = float(self.N)
-        for i in range(self.N):
-            for j in range(i + 1, self.N):
-                # h without contributions from i and j
-                h_i = h[i] - self.W[i, j] * p[j] - self.W[i, i] * p[i]
-                h_j = h[j] - self.W[j, i] * p[i] - self.W[j, j] * p[j]
-
-                dw = (p[i] * p[j] - p[i] * h_j - h_i * p[j]) / N
-                self.W[i, j] += dw
-                self.W[j, i] += dw
-
-        # Zero diagonal
-        np.fill_diagonal(self.W, 0.0)
-
+        # Use fast vectorized implementation
+        self._imprint_fast(pattern)
         self.patterns.append(pattern.copy())
         return True
 
@@ -164,22 +145,31 @@ class PatternMemory:
         )
 
     def _imprint_fast(self, pattern: np.ndarray):
-        """Fast (vectorized) single-pattern Storkey imprinting.
+        """Fast (vectorized) Storkey imprinting with mean correction.
 
-        Internally converts 0/1 patterns to bipolar (-1/+1) for proper
-        Hopfield dynamics, then stores weights in bipolar space.
+        Uses the covariance rule for sparse patterns: subtracts the mean
+        activity level so that sparse patterns (10% active) don't all
+        look the same in bipolar space.
+
+        For sparsity=0.1, bipolar mean = 2*0.1 - 1 = -0.8. Without
+        correction, all patterns are highly correlated (~0.64 overlap).
         """
         # Convert to bipolar: 0 -> -1, 1 -> +1
-        p = (2.0 * pattern - 1.0).astype(np.float32).reshape(-1, 1)
+        p_raw = (2.0 * pattern - 1.0).astype(np.float32)
+
+        # Mean-correct (covariance rule) for sparse pattern decorrelation
+        mu = float(np.mean(p_raw))
+        p = (p_raw - mu).astype(np.float32).reshape(-1, 1)
+
         N = float(self.N)
 
         # h_i = sum_k W_ik * p_k
         h = (self.W @ p.ravel()).reshape(-1, 1)
 
-        # Outer product: p_i * p_j
+        # Outer product: (p_i - μ)(p_j - μ)
         pp = p @ p.T
 
-        # p_i * h_j and h_i * p_j
+        # Storkey correction terms
         ph = p @ h.T
         hp = h @ p.T
 
@@ -194,44 +184,58 @@ class PatternMemory:
     def recall(
         self,
         cue: np.ndarray,
-        max_iterations: int = 100,
+        max_iterations: int = 200,
         tolerance: float = 1e-4,
-        tau: float = 0.5,
+        tau: float = 0.1,
     ) -> RecallResult:
         """Recall a stored pattern from a (possibly noisy/partial) cue.
 
-        Runs synchronous Hopfield dynamics until convergence.
+        Uses annealing: starts with high temperature for exploration,
+        then cools to sharpen the attractor convergence.
 
         Args:
             cue: Initial state (noisy/partial version of stored pattern).
             max_iterations: Max dynamics steps.
             tolerance: Convergence threshold.
-            tau: Temperature for sigmoid activation.
+            tau: Final temperature for tanh activation (lower = sharper).
 
         Returns:
             RecallResult with recalled pattern and match info.
         """
-        # Convert cue to bipolar (-1/+1) for dynamics
-        state = (2.0 * cue - 1.0).astype(np.float32)
+        # Convert cue to bipolar and mean-correct for dynamics
+        state_bp = (2.0 * cue - 1.0).astype(np.float32)
+        mu = float(2.0 * self.sparsity - 1.0)
+        state = (state_bp - mu).astype(np.float32)
+
+        # Annealing: start warm, cool down
+        tau_start = max(tau * 5, 0.5)
+        tau_end = tau
 
         for it in range(max_iterations):
             prev = state.copy()
 
+            # Anneal temperature
+            progress = it / max(1, max_iterations - 1)
+            current_tau = tau_start + (tau_end - tau_start) * progress
+
             # Compute local field
             h = self.W @ state
 
-            # Tanh activation (bipolar Hopfield)
-            new_state = np.tanh(np.clip(h / tau, -20, 20)).astype(np.float32)
+            # Tanh activation with annealing temperature
+            new_state = np.tanh(
+                np.clip(h / current_tau, -20, 20)
+            ).astype(np.float32)
 
-            # Momentum mixing
-            state = (0.3 * prev + 0.7 * new_state).astype(np.float32)
+            # Less momentum for faster convergence
+            state = (0.2 * prev + 0.8 * new_state).astype(np.float32)
 
             delta = float(np.max(np.abs(state - prev)))
             if delta < tolerance:
                 break
 
         # Convert back to 0/1 for comparison
-        state_binary = ((state + 1.0) / 2.0).astype(np.float32)
+        state_bp_out = state + mu
+        state_binary = ((state_bp_out + 1.0) / 2.0).astype(np.float32)
         state_binary = np.clip(state_binary, 0.0, 1.0)
 
         # Find closest stored pattern

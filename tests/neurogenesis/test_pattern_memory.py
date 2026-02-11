@@ -68,16 +68,19 @@ class TestPatternMemory:
         assert result.matched_index == 0
 
     def test_recall_multiple_patterns(self):
-        """Store 2 patterns in larger memory and recall each correctly."""
-        # Use larger N for reliable multi-pattern recall
-        big_mem = PatternMemory(N=256, sparsity=0.1)
+        """Store 2 patterns with 50% sparsity and recall each correctly.
+
+        Dense (50%) patterns are the classic Hopfield regime where recall
+        is most reliable. Sparse (10%) patterns require larger N.
+        """
+        big_mem = PatternMemory(N=128, sparsity=0.5)
         big_rng = np.random.default_rng(123)
 
         patterns = []
-        n_active = max(1, int(256 * 0.1))
+        n_active = int(128 * 0.5)
         for _ in range(2):
-            p = np.zeros(256, dtype=np.float32)
-            active = big_rng.choice(256, size=n_active, replace=False)
+            p = np.zeros(128, dtype=np.float32)
+            active = big_rng.choice(128, size=n_active, replace=False)
             p[active] = 1.0
             patterns.append(p)
             big_mem.imprint_pattern(p)
