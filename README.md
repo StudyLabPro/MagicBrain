@@ -2,9 +2,9 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-0.6.0-blue.svg)
+![Version](https://img.shields.io/badge/version-0.7.0-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.9+-green.svg)
-![Tests](https://img.shields.io/badge/tests-57%20passed-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-237%20passed-brightgreen.svg)
 ![Coverage](https://img.shields.io/badge/coverage-90%25+-brightgreen.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 

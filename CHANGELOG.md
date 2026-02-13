@@ -1,6 +1,45 @@
 # Changelog
 
-## [0.6.0] - 2026-02-08 - HYBRID EDITION 🚀
+## [0.7.0] - 2026-02-13 - NEUROGENESIS EDITION
+
+**MAJOR RELEASE**: Neurogenomic memory system — data encoded as compact generative genomes that reproduce information through dynamic neural structure activation.
+
+### NeuroGenesis Engine
+- **GenomeCompiler**: compile datasets into deterministic base-4 genomes (hash, statistical, hybrid strategies)
+- **DevelopmentOperator**: three-stage morphogenesis (positions, CPPN synaptogenesis, maturation)
+- **CPPN**: Compositional Pattern-Producing Networks for spatially-patterned weight generation
+- **PatternMemory**: Hopfield-style associative memory with Storkey learning rule (~0.14N capacity)
+- **AttractorDynamics**: continuous neural dynamics converging to attractor states via energy minimization
+- **ReconstructionOperator**: autoregressive, attractor-based, and cue-based data reconstruction
+- **Hopfield energy function**: E(s) = -1/2 sWs - theta*s + lambda||s||_1 with gradient computation
+- **Extended genome v2**: backward-compatible 72+ position format (CPPN, attractor, pattern params)
+- **CLI commands**: `magicbrain neurogenesis compile|run|benchmark|attractors`
+- **93 new tests** for the NeuroGenesis subsystem
+
+### Pattern Memory Improvements
+- Covariance learning rule for better capacity scaling
+- Annealed recall with temperature schedule for more reliable convergence
+- Improved pattern retrieval fidelity
+
+### Production Polish (v0.6.1 scope)
+- **True async parallel execution**: `asyncio.gather()` for concurrent model execution (~4x speedup)
+- **KnowledgeBase API integration**: real HTTP calls to KnowledgeBaseAI with graceful degradation
+- **Model metadata loading**: `load_model()` returns full metadata (genome, vocab, step, timestamp)
+- **Comprehensive hybrid tests**: 25 new tests for hybrid architectures and builder
+
+### Other
+- Integrated MagicBrainAPI as `api/` module (FastAPI REST microservice)
+- Updated CLAUDE.md with full v0.7.0 architecture documentation
+
+### Statistics
+- **Tests**: 263 total (237 passed, 26 skipped for optional deps)
+- **NeuroGenesis tests**: 93
+- **Code**: ~12,000 LOC
+- **100% backward compatibility** with v0.6.0
+
+---
+
+## [0.6.0] - 2026-02-08 - HYBRID EDITION
 
 **MAJOR RELEASE**: Universal Platform for Heterogeneous and Hybrid Neural Architectures!
 
