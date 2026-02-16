@@ -15,18 +15,22 @@ class Settings(BaseSettings):
 
     # Server
     HOST: str = "0.0.0.0"
-    PORT: int = 8001
+    PORT: int = 8000
 
     # CORS
     BACKEND_CORS_ORIGINS: list[str] = [
         "http://localhost:3000",
-        "http://localhost:8000",
+        "http://localhost:3001",
+        "http://localhost:8001",
+        "http://localhost:8002",
+        "http://localhost:8004",
     ]
 
-    # Redis (for task queue and caching)
-    REDIS_HOST: str = "localhost"
-    REDIS_PORT: int = 6379
-    REDIS_DB: int = 0
+    # Redis (for caching student cognitive models)
+    REDIS_URL: str = "redis://localhost:6379/3"
+
+    # KnowledgeBase integration
+    KB_BASE_URL: str = "http://localhost:8002"
 
     # Model Storage
     MODEL_STORAGE_PATH: str = "./models"
