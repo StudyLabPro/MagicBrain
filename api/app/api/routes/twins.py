@@ -74,6 +74,34 @@ class CognitiveState(BaseModel):
     last_updated: str
 
 
+class InteractionEvent(BaseModel):
+    """Student interaction event from StudyNinja-API."""
+    type: str  # "answer_submitted"|"lesson_completed"|"session_start"|"session_end"
+    topic_id: Optional[str] = None
+    is_correct: Optional[bool] = None
+    response_time_ms: Optional[int] = None
+    difficulty: float = Field(default=0.5, ge=0.0, le=1.0)
+    timestamp: Optional[str] = None
+
+
+class CognitivePrediction(BaseModel):
+    """Cognitive prediction from twin."""
+    predicted_confusion: float
+    predicted_attention: float
+    optimal_difficulty: float
+    recommended_action: str
+    neural_metrics: Dict
+    mastery_scores: Dict[str, float]
+
+
+class EnhancedCognitiveState(CognitiveState):
+    """Extended cognitive state with predictions."""
+    predicted_performance_next: float
+    recommended_break_in_minutes: Optional[float] = None
+    topic_readiness: Dict[str, float]
+    session_events_count: int
+
+
 class RecommendationRequest(BaseModel):
     """Request for learning recommendations."""
     available_topics: List[str]
@@ -217,6 +245,62 @@ async def predict_performance(
     twin = _get_twin(student_id)
     prediction = twin.predict_performance(topic_id, difficulty)
     return prediction
+
+
+@router.post("/{student_id}/events", response_model=CognitivePrediction)
+async def process_event(student_id: str, event: InteractionEvent):
+    """Process interaction event and return cognitive prediction."""
+    twin = _get_twin(student_id)
+    result = twin.process_interaction_event(event.model_dump())
+    pred = result["cognitive_prediction"]
+    return CognitivePrediction(
+        predicted_confusion=pred["predicted_confusion"],
+        predicted_attention=pred["predicted_attention"],
+        optimal_difficulty=pred["optimal_difficulty"],
+        recommended_action=pred["recommended_action"],
+        neural_metrics=result.get("neural_metrics", {}),
+        mastery_scores={
+            k: float(v) for k, v in result.get("mastery_scores", {}).items()
+        },
+    )
+
+
+@router.post("/{student_id}/batch-events", response_model=CognitivePrediction)
+async def process_batch_events(student_id: str, events: List[InteractionEvent]):
+    """Process multiple events in sequence."""
+    twin = _get_twin(student_id)
+    result = None
+    for event in events:
+        result = twin.process_interaction_event(event.model_dump())
+    if result is None:
+        raise HTTPException(status_code=400, detail="No events provided")
+    pred = result["cognitive_prediction"]
+    return CognitivePrediction(
+        predicted_confusion=pred["predicted_confusion"],
+        predicted_attention=pred["predicted_attention"],
+        optimal_difficulty=pred["optimal_difficulty"],
+        recommended_action=pred["recommended_action"],
+        neural_metrics=result.get("neural_metrics", {}),
+        mastery_scores={
+            k: float(v) for k, v in result.get("mastery_scores", {}).items()
+        },
+    )
+
+
+@router.get("/{student_id}/enhanced-state", response_model=EnhancedCognitiveState)
+async def get_enhanced_state(student_id: str):
+    """Get enhanced cognitive state with SNN predictions."""
+    twin = _get_twin(student_id)
+    state = twin.get_enhanced_cognitive_state()
+    return EnhancedCognitiveState(**state)
+
+
+@router.get("/{student_id}/optimal-difficulty/{topic_id}")
+async def get_optimal_difficulty(student_id: str, topic_id: str):
+    """Get recommended difficulty for a topic."""
+    twin = _get_twin(student_id)
+    difficulty = twin.get_optimal_difficulty(topic_id)
+    return {"difficulty": difficulty, "topic_id": topic_id, "student_id": student_id}
 
 
 @router.delete("/{student_id}", status_code=status.HTTP_204_NO_CONTENT)

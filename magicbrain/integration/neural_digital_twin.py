@@ -7,7 +7,7 @@ cognitive state, knowledge mastery, and learning dynamics.
 from __future__ import annotations
 from typing import Dict, List, Optional, Tuple
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timedelta
 import hashlib
 
 from ..brain import TextBrain
@@ -60,6 +60,9 @@ class NeuralDigitalTwin:
 
         # Topic to neuron mapping
         self.topic_neurons: Dict[str, List[int]] = {}
+
+        # Topic names (topic_id -> human-readable name)
+        self.topic_names: Dict[str, str] = {}
 
         # Mastery scores (topic_id -> mastery level 0-1)
         self.mastery_scores: Dict[str, float] = initial_mastery or {}
@@ -133,6 +136,7 @@ class NeuralDigitalTwin:
         ))
 
         self.topic_neurons[topic_id] = topic_neurons
+        self.topic_names[topic_id] = topic_name
         self.mastery_scores[topic_id] = 0.0
         self.last_practice[topic_id] = datetime.now()
 
@@ -366,9 +370,10 @@ class NeuralDigitalTwin:
 
         # Learning velocity (recent mastery changes)
         recent_events = self.learning_events[-10:] if len(self.learning_events) > 0 else []
-        learning_velocity = np.mean([
-            e["mastery_change"] for e in recent_events
-        ]) if recent_events else 0.0
+        mastery_changes = [
+            e["mastery_change"] for e in recent_events if "mastery_change" in e
+        ]
+        learning_velocity = np.mean(mastery_changes) if mastery_changes else 0.0
 
         return {
             "student_id": self.student_id,
@@ -379,6 +384,226 @@ class NeuralDigitalTwin:
             "neural_metrics": neural_metrics,
             "last_updated": self.last_updated.isoformat(),
         }
+
+    def process_interaction_event(self, event: dict) -> dict:
+        """
+        Process a student interaction event from StudyNinja-API.
+
+        Handles answer submissions, lesson completions, and session
+        lifecycle events. Updates mastery scores and learning events,
+        then returns cognitive predictions.
+
+        Args:
+            event: Interaction event dict with keys:
+                - type: "answer_submitted"|"lesson_completed"|"session_start"|"session_end"
+                - topic_id: Optional topic identifier
+                - is_correct: Optional bool for answer correctness
+                - response_time_ms: Optional response time in milliseconds
+                - difficulty: Float 0-1 (default 0.5)
+                - timestamp: Optional ISO timestamp string
+
+        Returns:
+            Dict with cognitive_prediction, neural_metrics, and mastery_scores
+        """
+        event_type = event.get("type", "")
+        topic_id = event.get("topic_id")
+        is_correct = event.get("is_correct")
+        response_time_ms = event.get("response_time_ms")
+        difficulty = event.get("difficulty", 0.5)
+        timestamp_str = event.get("timestamp")
+
+        timestamp = datetime.now()
+        if timestamp_str:
+            try:
+                timestamp = datetime.fromisoformat(timestamp_str)
+            except (ValueError, TypeError):
+                timestamp = datetime.now()
+
+        # Process based on event type
+        if event_type == "answer_submitted" and topic_id and topic_id in self.topic_neurons:
+            # Update mastery based on correctness and difficulty
+            old_mastery = self.mastery_scores.get(topic_id, 0.0)
+            if is_correct:
+                # Correct answer: gain proportional to difficulty
+                gain = 0.02 + difficulty * 0.03  # 0.02 to 0.05
+                new_mastery = np.clip(old_mastery + gain, 0.0, 1.0)
+            else:
+                # Incorrect answer: small decrease scaled by difficulty
+                loss = 0.01 + (1.0 - difficulty) * 0.02  # harder questions penalize less
+                new_mastery = np.clip(old_mastery - loss, 0.0, 1.0)
+
+            self.mastery_scores[topic_id] = float(new_mastery)
+            self.last_practice[topic_id] = timestamp
+
+        elif event_type == "lesson_completed" and topic_id:
+            # Register topic if not yet registered
+            if topic_id not in self.topic_neurons:
+                self.register_topic(topic_id, topic_id)
+
+            # Lesson completion gives a small mastery bump
+            old_mastery = self.mastery_scores.get(topic_id, 0.0)
+            gain = 0.03 + difficulty * 0.02  # 0.03 to 0.05
+            new_mastery = np.clip(old_mastery + gain, 0.0, 1.0)
+            self.mastery_scores[topic_id] = float(new_mastery)
+            self.last_practice[topic_id] = timestamp
+
+        # Always append to learning_events
+        learning_event = {
+            "timestamp": timestamp,
+            "type": event_type,
+            "topic_id": topic_id,
+            "is_correct": is_correct,
+            "response_time_ms": response_time_ms,
+            "difficulty": difficulty,
+        }
+        self.learning_events.append(learning_event)
+        self.last_updated = datetime.now()
+
+        # Build cognitive prediction
+        cognitive_prediction = self._build_cognitive_prediction(topic_id)
+        neural_metrics = self.get_cognitive_state().get("neural_metrics", {})
+
+        return {
+            "cognitive_prediction": cognitive_prediction,
+            "neural_metrics": neural_metrics,
+            "mastery_scores": dict(self.mastery_scores),
+        }
+
+    def _build_cognitive_prediction(self, topic_id: Optional[str] = None) -> dict:
+        """
+        Build cognitive prediction based on current state.
+
+        Args:
+            topic_id: Optional topic to focus prediction on
+
+        Returns:
+            Dict with predicted_confusion, predicted_attention,
+            optimal_difficulty, and recommended_action
+        """
+        # Compute average mastery
+        if self.mastery_scores:
+            avg_mastery = float(np.mean(list(self.mastery_scores.values())))
+        else:
+            avg_mastery = 0.0
+
+        # Predicted confusion: inversely related to mastery
+        predicted_confusion = float(np.clip(1.0 - avg_mastery, 0.0, 1.0))
+
+        # Predicted attention: based on recent event frequency and mastery
+        recent_events = [
+            e for e in self.learning_events[-20:]
+            if isinstance(e.get("timestamp"), datetime)
+            and (datetime.now() - e["timestamp"]) < timedelta(hours=1)
+        ]
+        event_count = len(recent_events)
+
+        # Attention decreases with too many events (fatigue)
+        if event_count > 15:
+            predicted_attention = 0.3
+        elif event_count > 10:
+            predicted_attention = 0.5
+        else:
+            predicted_attention = float(np.clip(0.7 + avg_mastery * 0.3, 0.0, 1.0))
+
+        # Optimal difficulty for the given topic or overall
+        if topic_id and topic_id in self.mastery_scores:
+            optimal_difficulty = self.get_optimal_difficulty(topic_id)
+        else:
+            optimal_difficulty = float(np.clip(avg_mastery * 0.8 + 0.1, 0.1, 0.9))
+
+        # Recommended action
+        if predicted_attention < 0.4:
+            recommended_action = "break"
+        elif predicted_confusion > 0.7:
+            recommended_action = "review"
+        elif avg_mastery > 0.8 and predicted_attention > 0.6:
+            recommended_action = "continue"
+        elif event_count > 10:
+            recommended_action = "switch_format"
+        else:
+            recommended_action = "continue"
+
+        return {
+            "predicted_confusion": predicted_confusion,
+            "predicted_attention": predicted_attention,
+            "optimal_difficulty": optimal_difficulty,
+            "recommended_action": recommended_action,
+        }
+
+    def get_enhanced_cognitive_state(self) -> dict:
+        """
+        Extended cognitive state with SNN-derived predictions.
+
+        Returns everything from get_cognitive_state() plus:
+        - predicted_performance_next: float (0-1) based on avg mastery
+        - recommended_break_in_minutes: float | None (if too many events in short time)
+        - topic_readiness: dict[str, float] (per-topic readiness = mastery * (1 - forgetting))
+        - session_events_count: int (events in last hour)
+        """
+        # Start with base cognitive state
+        state = self.get_cognitive_state()
+
+        # Predicted performance based on average mastery
+        if self.mastery_scores:
+            avg_mastery = float(np.mean(list(self.mastery_scores.values())))
+        else:
+            avg_mastery = 0.0
+
+        # Performance prediction: slight discount from raw mastery
+        predicted_performance_next = float(np.clip(avg_mastery * 0.9, 0.0, 1.0))
+
+        # Count events in last hour
+        now = datetime.now()
+        session_events_count = 0
+        for e in self.learning_events:
+            ts = e.get("timestamp")
+            if isinstance(ts, datetime) and (now - ts) < timedelta(hours=1):
+                session_events_count += 1
+
+        # Recommended break: if many events in short time, suggest a break
+        recommended_break_in_minutes = None
+        if session_events_count > 20:
+            recommended_break_in_minutes = 15.0
+        elif session_events_count > 15:
+            recommended_break_in_minutes = 10.0
+        elif session_events_count > 10:
+            recommended_break_in_minutes = 5.0
+
+        # Topic readiness: mastery * (1 - forgetting_factor)
+        topic_readiness: Dict[str, float] = {}
+        for tid, mastery in self.mastery_scores.items():
+            if tid in self.last_practice:
+                days_since = (now - self.last_practice[tid]).total_seconds() / 86400.0
+                forgetting_factor = 1.0 - float(np.exp(-self.forgetting_rate * days_since))
+            else:
+                forgetting_factor = 0.0
+            readiness = float(mastery * (1.0 - forgetting_factor))
+            topic_readiness[tid] = float(np.clip(readiness, 0.0, 1.0))
+
+        # Merge into state
+        state["predicted_performance_next"] = predicted_performance_next
+        state["recommended_break_in_minutes"] = recommended_break_in_minutes
+        state["topic_readiness"] = topic_readiness
+        state["session_events_count"] = session_events_count
+
+        return state
+
+    def get_optimal_difficulty(self, topic_id: str) -> float:
+        """
+        Use mastery + neural activity to estimate optimal difficulty.
+
+        Formula: optimal_diff = mastery * 0.8 + 0.1
+        (slight challenge above current mastery, floor at 0.1, cap at 0.9)
+
+        Args:
+            topic_id: Topic identifier
+
+        Returns:
+            Optimal difficulty float between 0.0 and 1.0
+        """
+        mastery = self.mastery_scores.get(topic_id, 0.5)
+        optimal_diff = mastery * 0.8 + 0.1
+        return float(np.clip(optimal_diff, 0.1, 0.9))
 
     def save_state(self, filepath: str):
         """Save twin state to file."""
@@ -400,9 +625,9 @@ class NeuralDigitalTwin:
             "mastery_scores": {k: float(v) for k, v in self.mastery_scores.items()},
             "learning_events": [
                 {
-                    "timestamp": e["timestamp"].isoformat(),
-                    "topic_id": e["topic_id"],
-                    "mastery_change": float(e["mastery_change"]),
+                    "timestamp": e["timestamp"].isoformat() if hasattr(e["timestamp"], "isoformat") else str(e["timestamp"]),
+                    "topic_id": e.get("topic_id"),
+                    "mastery_change": float(e["mastery_change"]) if "mastery_change" in e else 0.0,
                 }
                 for e in self.learning_events[-100:]  # Last 100 events
             ],
