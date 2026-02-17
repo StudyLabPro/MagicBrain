@@ -14,6 +14,8 @@ Convergence criterion: ||s_{t+1} - s_t|| < tolerance
 
 from __future__ import annotations
 
+import time
+from dataclasses import dataclass, field
 from typing import NamedTuple
 
 import numpy as np
@@ -36,6 +38,17 @@ class Attractor(NamedTuple):
     energy: float
     basin_size: int  # number of probes that converged here
     stability: float  # how stable under perturbation
+
+
+@dataclass
+class AttractorMetrics:
+    """Quality metrics for discovered attractors."""
+    n_attractors: int
+    basin_stability: float  # avg fraction of perturbations that return
+    separation_distance: float  # min L_inf distance between attractors
+    mean_energy: float
+    energy_std: float
+    total_basin_coverage: int  # sum of all basin sizes
 
 
 class AttractorDynamics:
@@ -100,6 +113,7 @@ class AttractorDynamics:
         max_iterations: int | None = None,
         tolerance: float | None = None,
         track_energy: bool = True,
+        max_time_seconds: float = 60,
     ) -> ConvergenceResult:
         """Run dynamics until convergence to an attractor.
 
@@ -111,27 +125,59 @@ class AttractorDynamics:
             max_iterations: Override default max iterations.
             tolerance: Override default tolerance.
             track_energy: Whether to record energy at each step.
+            max_time_seconds: Maximum wall-clock time for convergence.
 
         Returns:
             ConvergenceResult with final state and diagnostics.
         """
         max_iter = max_iterations or self.max_iterations
         tol = tolerance or self.tolerance
+        t0 = time.time()
 
         state = cue.copy().astype(np.float32)
         energy_trajectory: list[float] = []
+        energy_increase_count = 0
 
         if track_energy:
             e0 = self.energy_fn.energy(state, weights, theta, src, dst)
             energy_trajectory.append(e0)
 
         for i in range(max_iter):
+            # Wallclock timeout check
+            if time.time() - t0 > max_time_seconds:
+                final_e = energy_trajectory[-1] if energy_trajectory else (
+                    self.energy_fn.energy(state, weights, theta, src, dst)
+                )
+                return ConvergenceResult(
+                    state=state,
+                    converged=False,
+                    iterations=i,
+                    final_energy=final_e,
+                    energy_trajectory=energy_trajectory,
+                )
+
             prev = state.copy()
             state = self.step(state, weights, theta, src, dst)
 
             if track_energy:
                 e = self.energy_fn.energy(state, weights, theta, src, dst)
                 energy_trajectory.append(e)
+
+                # Energy divergence detection
+                if len(energy_trajectory) >= 2:
+                    if energy_trajectory[-1] > energy_trajectory[-2]:
+                        energy_increase_count += 1
+                    else:
+                        energy_increase_count = 0
+
+                    if energy_increase_count >= 5:
+                        return ConvergenceResult(
+                            state=state,
+                            converged=False,
+                            iterations=i + 1,
+                            final_energy=energy_trajectory[-1],
+                            energy_trajectory=energy_trajectory,
+                        )
 
             delta = float(np.max(np.abs(state - prev)))
             if delta < tol:
@@ -236,6 +282,69 @@ class AttractorDynamics:
 
         result_list.sort(key=lambda a: -a.basin_size)
         return result_list
+
+    def find_attractors_with_metrics(
+        self,
+        N: int,
+        weights: np.ndarray,
+        theta: np.ndarray,
+        n_probes: int = 500,
+        sparsity: float = 0.1,
+        src: np.ndarray | None = None,
+        dst: np.ndarray | None = None,
+        rng: np.random.Generator | None = None,
+        attractor_merge_threshold: float = 0.05,
+    ) -> tuple[list[Attractor], AttractorMetrics]:
+        """Discover attractors and return quality metrics.
+
+        Returns:
+            Tuple of (attractor_list, AttractorMetrics).
+        """
+        attractor_list = self.find_attractors(
+            N, weights, theta, n_probes, sparsity, src, dst, rng,
+            attractor_merge_threshold,
+        )
+
+        if not attractor_list:
+            metrics = AttractorMetrics(
+                n_attractors=0,
+                basin_stability=0.0,
+                separation_distance=0.0,
+                mean_energy=0.0,
+                energy_std=0.0,
+                total_basin_coverage=0,
+            )
+            return attractor_list, metrics
+
+        # Basin stability: average stability across attractors
+        basin_stability = float(np.mean([a.stability for a in attractor_list]))
+
+        # Separation distance: min L_inf between any pair of attractors
+        if len(attractor_list) >= 2:
+            min_sep = float("inf")
+            for i in range(len(attractor_list)):
+                for j in range(i + 1, len(attractor_list)):
+                    dist = float(np.max(np.abs(
+                        attractor_list[i].state - attractor_list[j].state
+                    )))
+                    if dist < min_sep:
+                        min_sep = dist
+            separation_distance = min_sep
+        else:
+            separation_distance = 0.0
+
+        energies = [a.energy for a in attractor_list]
+
+        metrics = AttractorMetrics(
+            n_attractors=len(attractor_list),
+            basin_stability=basin_stability,
+            separation_distance=separation_distance,
+            mean_energy=float(np.mean(energies)),
+            energy_std=float(np.std(energies)),
+            total_basin_coverage=sum(a.basin_size for a in attractor_list),
+        )
+
+        return attractor_list, metrics
 
     def _measure_stability(
         self,

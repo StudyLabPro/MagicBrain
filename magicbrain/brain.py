@@ -5,9 +5,15 @@ from .graph import build_graph
 from .utils import softmax, sparsify_topm, sigmoid, clamp
 
 class TextBrain:
-    def __init__(self, genome: str, vocab_size: int, seed_override: int | None = None):
+    def __init__(self, genome: str, vocab_size: int, seed_override: int | None = None,
+                 use_act: bool = False):
         self.genome_str = genome
         self.p = decode_genome(genome)
+
+        self._act = None
+        if use_act:
+            from .integration.act_backend import ACTBackend
+            self._act = ACTBackend()
         self.N = int(self.p["N"])
         self.K = int(self.p["K"])
         self.vocab_size = int(vocab_size)
@@ -166,6 +172,8 @@ class TextBrain:
 
         state = self.compute_state()
         logits = (state @ self.R + self.b).astype(np.float32)
+        if self._act is not None and self._act.available:
+            return self._act.softmax(logits)
         return softmax(logits)
 
     def _consolidate(self):
@@ -240,7 +248,10 @@ class TextBrain:
 
         state = self.compute_state()
 
-        dR = (lr_out * (state[:, None] * grad[None, :])).astype(np.float32)
+        if self._act is not None and self._act.available:
+            dR = (lr_out * self._act.outer_product(state, grad)).astype(np.float32)
+        else:
+            dR = (lr_out * (state[:, None] * grad[None, :])).astype(np.float32)
         np.clip(dR, -self.max_R_update, self.max_R_update, out=dR)
         self.R -= dR
 
@@ -255,7 +266,10 @@ class TextBrain:
 
         dW = (lr_rec * self.dopamine * adv * pre * post).astype(np.float32)
         np.clip(dW, -0.02, 0.02, out=dW)
-        self.w_fast += dW
+        if self._act is not None and self._act.available:
+            self.w_fast = self._act.weight_update(self.w_fast, dW, 1.0)
+        else:
+            self.w_fast += dW
 
         self._enforce_ei_signs()
 

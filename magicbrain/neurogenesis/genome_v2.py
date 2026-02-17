@@ -12,6 +12,8 @@ to the v1 genome. The rest is silently ignored by the v1 decoder.
 
 from __future__ import annotations
 
+import zlib
+
 import numpy as np
 
 from ..genome import decode_genome
@@ -67,6 +69,126 @@ class GenomeV2:
 
     def to_string(self) -> str:
         return "".join(str(d) for d in self.digits)
+
+    def checksum(self) -> int:
+        """Compute CRC32 checksum of the genome string for integrity verification."""
+        return zlib.crc32(self.to_string().encode("ascii")) & 0xFFFFFFFF
+
+    def validate(self) -> tuple[bool, list[str]]:
+        """Validate genome format, length, and valid characters.
+
+        Returns:
+            Tuple of (is_valid, list_of_error_messages).
+        """
+        errors: list[str] = []
+
+        if not self.raw:
+            errors.append("Genome string is empty")
+            return False, errors
+
+        # Check valid characters
+        invalid_chars = set(self.raw) - set("0123")
+        if invalid_chars:
+            errors.append(
+                f"Invalid characters in genome: {invalid_chars}"
+            )
+
+        # Check minimum length
+        if len(self.digits) < 24:
+            errors.append(
+                f"Genome too short: {len(self.digits)} digits "
+                f"(minimum 24 for topology section)"
+            )
+
+        # Check section boundaries for extended genomes
+        if self.is_extended:
+            if len(self.cppn_section) < 32:
+                errors.append(
+                    f"CPPN section incomplete: {len(self.cppn_section)} digits "
+                    f"(expected 32)"
+                )
+            if len(self.attractor_section) < 16:
+                errors.append(
+                    f"Attractor section incomplete: "
+                    f"{len(self.attractor_section)} digits (expected 16)"
+                )
+
+        return len(errors) == 0, errors
+
+    def pretty_print(self) -> str:
+        """Decode all sections and format as human-readable text."""
+        lines: list[str] = []
+        lines.append(f"GenomeV2 (length={self.length}, extended={self.is_extended})")
+        lines.append(f"  Raw: {self.raw[:40]}{'...' if len(self.raw) > 40 else ''}")
+        lines.append(f"  Checksum: 0x{self.checksum():08X}")
+        lines.append("")
+
+        # Topology section
+        topo = self.topology_section
+        lines.append(f"  [Topology] positions 0-23 ({len(topo)} digits)")
+        if topo:
+            params = decode_genome(self.to_string()[:24])
+            lines.append(f"    N={params['N']}, K={params['K']}")
+            lines.append(f"    lr={params.get('lr', '?')}")
+            lines.append(f"    seed={params.get('seed', '?')}")
+
+        # CPPN section
+        cppn = self.cppn_section
+        if cppn:
+            lines.append(f"  [CPPN] positions 24-55 ({len(cppn)} digits)")
+            n_layers = min(3, max(1, cppn[0] + 1)) if cppn else 0
+            lines.append(f"    n_layers={n_layers}")
+
+        # Attractor section
+        att = self.attractor_section
+        if att:
+            lines.append(f"  [Attractor] positions 56-71 ({len(att)} digits)")
+
+        # Pattern section
+        pat = self.pattern_section
+        if pat:
+            lines.append(f"  [Patterns] positions 72+ ({len(pat)} digits)")
+
+        return "\n".join(lines)
+
+    def diff(self, other: GenomeV2) -> dict[str, dict]:
+        """Compare this genome with another, returning differences by section.
+
+        Args:
+            other: Another GenomeV2 to compare against.
+
+        Returns:
+            Dict with section names as keys, each containing 'self' and 'other'
+            digit lists and a 'changed_positions' list of indices that differ.
+        """
+        result: dict[str, dict] = {}
+
+        sections = {
+            "topology": (self.topology_section, other.topology_section),
+            "cppn": (self.cppn_section, other.cppn_section),
+            "attractor": (self.attractor_section, other.attractor_section),
+            "patterns": (self.pattern_section, other.pattern_section),
+        }
+
+        for name, (self_sec, other_sec) in sections.items():
+            max_len = max(len(self_sec), len(other_sec))
+            if max_len == 0:
+                continue
+            changed = []
+            for i in range(max_len):
+                v_self = self_sec[i] if i < len(self_sec) else None
+                v_other = other_sec[i] if i < len(other_sec) else None
+                if v_self != v_other:
+                    changed.append(i)
+
+            if changed:
+                result[name] = {
+                    "self": self_sec,
+                    "other": other_sec,
+                    "changed_positions": changed,
+                }
+
+        return result
 
     @classmethod
     def from_sections(

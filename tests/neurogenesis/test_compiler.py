@@ -115,7 +115,7 @@ class TestGenomeCompiler:
 
     def test_statistical_larger_data_larger_N(self):
         """Statistical strategy should give larger N for larger datasets."""
-        small = self.compiler.compile("hi", strategy="statistical")
+        small = self.compiler.compile("hello world hi there", strategy="statistical")
         large = self.compiler.compile(SHAKESPEARE, strategy="statistical")
         params_small = decode_genome(small)
         params_large = decode_genome(large)

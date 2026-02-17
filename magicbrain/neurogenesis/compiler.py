@@ -7,16 +7,34 @@ Strategies:
   - hash:        SHA-256(data) -> base-4 (pseudorandom baseline)
   - statistical:  data statistics -> informed genome positions
   - hybrid:      statistics for key params, hash for the rest
+  - auto:        pick strategy based on dataset characteristics
 """
 
 from __future__ import annotations
 
 import hashlib
+import logging
 import math
+import time
 from collections import Counter
-from typing import NamedTuple
+from dataclasses import dataclass, field
+from typing import NamedTuple, Optional
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
+
+MAX_DATA_SIZE = 100 * 1024 * 1024  # 100 MB
+MIN_DATA_LENGTH = 10
+
+
+@dataclass
+class CompilationMetrics:
+    """Metrics from a genome compilation run."""
+    time_seconds: float
+    genome_quality_score: float
+    strategy_used: str
+    data_stats: dict = field(default_factory=dict)
 
 
 class DatasetStats(NamedTuple):
@@ -103,35 +121,153 @@ class GenomeCompiler:
         strategy: str = "statistical",
         genome_length: int = 28,
         hash_algorithm: str = "sha256",
+        seed: Optional[int] = None,
     ) -> str:
         """Compile dataset into a genome string.
 
         Args:
             data: Input dataset (text or bytes).
-            strategy: Compilation strategy ('hash', 'statistical', 'hybrid').
+            strategy: Compilation strategy ('hash', 'statistical', 'hybrid', 'auto').
             genome_length: Target genome length (minimum 24).
             hash_algorithm: Hash function for hash-based strategies.
+            seed: Optional seed for deterministic results. When provided,
+                appended to data hash for reproducible randomized sections.
 
         Returns:
             Base-4 genome string.
         """
+        # Input validation
         if isinstance(data, str):
+            if not data or not data.strip():
+                raise ValueError("Input data is empty or whitespace-only")
+            if len(data) < MIN_DATA_LENGTH:
+                raise ValueError(
+                    f"Input data too short: {len(data)} chars "
+                    f"(minimum {MIN_DATA_LENGTH})"
+                )
             data_bytes = data.encode("utf-8")
             text = data
         else:
+            if not data:
+                raise ValueError("Input data is empty")
+            if len(data) < MIN_DATA_LENGTH:
+                raise ValueError(
+                    f"Input data too short: {len(data)} bytes "
+                    f"(minimum {MIN_DATA_LENGTH})"
+                )
             data_bytes = data
-            text = data.decode("utf-8", errors="replace")
+            try:
+                text = data.decode("utf-8")
+            except UnicodeDecodeError:
+                text = data.decode("utf-8", errors="replace")
+
+        if len(data_bytes) > MAX_DATA_SIZE:
+            raise ValueError(
+                f"Input data too large: {len(data_bytes)} bytes "
+                f"(maximum {MAX_DATA_SIZE})"
+            )
 
         genome_length = max(24, genome_length)
 
+        # Seed handling: modify data hash for reproducibility
+        if seed is not None:
+            seed_suffix = f"_seed{seed}".encode("utf-8")
+            data_bytes_for_hash = data_bytes + seed_suffix
+        else:
+            data_bytes_for_hash = data_bytes
+
+        # Auto strategy selection
+        if strategy == "auto":
+            strategy = self._auto_select_strategy(text)
+            logger.info("Auto-selected strategy: %s", strategy)
+
         if strategy == "hash":
-            return self._compile_hash(data_bytes, genome_length, hash_algorithm)
+            return self._compile_hash(data_bytes_for_hash, genome_length, hash_algorithm)
         elif strategy == "statistical":
-            return self._compile_statistical(text, genome_length, hash_algorithm)
+            return self._compile_statistical(text, genome_length, hash_algorithm, seed=seed)
         elif strategy == "hybrid":
-            return self._compile_hybrid(text, genome_length, hash_algorithm)
+            return self._compile_hybrid(text, genome_length, hash_algorithm, seed=seed)
         else:
             raise ValueError(f"Unknown strategy: {strategy}")
+
+    def _auto_select_strategy(self, text: str) -> str:
+        """Pick compilation strategy based on dataset characteristics.
+
+        - small data (< 1KB): hash (not enough stats signal)
+        - medium data (1KB - 100KB): statistical
+        - large data (> 100KB): hybrid (stats for architecture, hash for rest)
+        """
+        size = len(text)
+        if size < 1024:
+            return "hash"
+        elif size < 100_000:
+            return "statistical"
+        else:
+            return "hybrid"
+
+    def compile_with_metrics(
+        self,
+        data: str | bytes,
+        strategy: str = "statistical",
+        genome_length: int = 28,
+        hash_algorithm: str = "sha256",
+        seed: Optional[int] = None,
+    ) -> tuple[str, CompilationMetrics]:
+        """Compile and return genome with compilation metrics.
+
+        Returns:
+            Tuple of (genome_string, CompilationMetrics).
+        """
+        t0 = time.time()
+
+        if isinstance(data, str):
+            text = data
+        else:
+            text = data.decode("utf-8", errors="replace")
+
+        actual_strategy = strategy
+        if strategy == "auto":
+            actual_strategy = self._auto_select_strategy(text)
+
+        genome = self.compile(data, strategy, genome_length, hash_algorithm, seed)
+
+        elapsed = time.time() - t0
+
+        stats = analyze_dataset(text)
+        quality_score = self._compute_quality_score(genome, stats)
+
+        metrics = CompilationMetrics(
+            time_seconds=elapsed,
+            genome_quality_score=quality_score,
+            strategy_used=actual_strategy,
+            data_stats=stats._asdict(),
+        )
+
+        return genome, metrics
+
+    def _compute_quality_score(self, genome: str, stats: DatasetStats) -> float:
+        """Compute a genome quality score (0-1) based on diversity and coverage."""
+        if not genome:
+            return 0.0
+        # Digit diversity: how evenly distributed are base-4 digits
+        counts = Counter(genome)
+        n = len(genome)
+        # Max entropy for 4 symbols: log2(4) = 2
+        entropy = 0.0
+        for c in "0123":
+            p = counts.get(c, 0) / n
+            if p > 0:
+                entropy -= p * math.log2(p)
+        diversity = entropy / 2.0  # normalize to 0-1
+
+        # Length adequacy: longer genomes for larger data
+        if stats.size > 0:
+            ideal_length = min(128, max(24, int(math.log2(stats.size) * 4)))
+            length_score = min(1.0, len(genome) / ideal_length)
+        else:
+            length_score = 0.5
+
+        return 0.6 * diversity + 0.4 * length_score
 
     def _compile_hash(
         self, data: bytes, length: int, algorithm: str
@@ -147,7 +283,7 @@ class GenomeCompiler:
         return base4[:length]
 
     def _compile_statistical(
-        self, text: str, length: int, algorithm: str
+        self, text: str, length: int, algorithm: str, seed: Optional[int] = None
     ) -> str:
         """Statistics-driven genome. Key positions set from data properties."""
         stats = analyze_dataset(text)
@@ -191,7 +327,10 @@ class GenomeCompiler:
         pos7 = _clamp_base4(homeo_code)
 
         # Positions 8-11: seed from hash (topology randomization)
-        h = hashlib.new(algorithm, text.encode("utf-8")).hexdigest()
+        hash_input = text.encode("utf-8")
+        if seed is not None:
+            hash_input += f"_seed{seed}".encode("utf-8")
+        h = hashlib.new(algorithm, hash_input).hexdigest()
         hash_b4 = _hex_to_base4(h)
         pos8_11 = hash_b4[:4]
 
@@ -253,7 +392,7 @@ class GenomeCompiler:
         return genome[:length]
 
     def _compile_hybrid(
-        self, text: str, length: int, algorithm: str
+        self, text: str, length: int, algorithm: str, seed: Optional[int] = None
     ) -> str:
         """Hybrid: statistics for architecture params, hash for dynamics."""
         stats = analyze_dataset(text)
@@ -276,7 +415,10 @@ class GenomeCompiler:
         pos5 = _clamp_base4(kact_code)
 
         # Rest from hash
-        h = hashlib.new(algorithm, text.encode("utf-8")).hexdigest()
+        hash_input = text.encode("utf-8")
+        if seed is not None:
+            hash_input += f"_seed{seed}".encode("utf-8")
+        h = hashlib.new(algorithm, hash_input).hexdigest()
         hash_b4 = _hex_to_base4(h)
 
         genome_chars = list(hash_b4[:length])
@@ -295,6 +437,7 @@ class GenomeCompiler:
         strategy: str = "statistical",
         genome_length: int = 28,
         hash_algorithm: str = "sha256",
+        seed: Optional[int] = None,
     ) -> dict:
         """Compile and return genome with full metadata.
 
@@ -307,7 +450,7 @@ class GenomeCompiler:
             data_bytes = data
             text = data.decode("utf-8", errors="replace")
 
-        genome = self.compile(data, strategy, genome_length, hash_algorithm)
+        genome = self.compile(data, strategy, genome_length, hash_algorithm, seed)
         stats = analyze_dataset(text)
         data_hash = hashlib.new(hash_algorithm, data_bytes).hexdigest()
 

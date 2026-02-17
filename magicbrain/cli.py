@@ -69,6 +69,20 @@ def main():
     monitor_parser.add_argument("--metrics", type=str, default="metrics.json",
                                help="Output file for metrics")
 
+    # TRAIN-DISTRIBUTED
+    dist_parser = subparsers.add_parser("train-distributed", help="Distributed training with FedAvg")
+    dist_parser.add_argument("--genome", type=str, default="30121033102301230112332100123")
+    dist_parser.add_argument("--data", type=str, help="Path to text file")
+    dist_parser.add_argument("--workers", type=int, default=4, help="Number of parallel workers")
+    dist_parser.add_argument("--sync-every", type=int, default=100, help="Steps between sync rounds")
+    dist_parser.add_argument("--steps", type=int, default=10000, help="Total training steps per worker")
+    dist_parser.add_argument("--partition", type=str, default="overlapping",
+                             choices=["overlapping", "round_robin", "shuffle"],
+                             help="Data partitioning strategy")
+    dist_parser.add_argument("--checkpoint-dir", type=str, default=None,
+                             help="Directory for training checkpoints")
+    dist_parser.add_argument("--out", type=str, default="model.npz", help="Output model path")
+
     # NEUROGENESIS
     ng_parser = subparsers.add_parser("neurogenesis", help="NeuroGenesis Engine: dataset-driven genome compilation")
     ng_sub = ng_parser.add_subparsers(dest="ng_command", required=True)
@@ -252,6 +266,56 @@ def main():
         print(f"  Recent avg loss: {summary['recent_avg_loss']:.4f}")
         print(f"  Recent avg dopamine: {summary['recent_avg_dopamine']:.3f}")
         print(f"  Recent avg firing rate: {summary['recent_avg_firing_rate']:.3f}")
+
+    elif args.command == "train-distributed":
+        from .training.coordinator import TrainingCoordinator
+
+        text = DEFAULT_TEXT
+        if args.data:
+            with open(args.data, "r", encoding="utf-8") as f:
+                text = f.read()
+        text = " ".join(text.split())
+
+        print(f"Distributed training: genome={args.genome}, workers={args.workers}, "
+              f"sync_every={args.sync_every}, steps={args.steps}")
+        print(f"Partition mode: {args.partition}")
+
+        coordinator = TrainingCoordinator(
+            genome_str=args.genome,
+            data=text,
+            n_workers=args.workers,
+            sync_every=args.sync_every,
+            partition_mode=args.partition,
+            checkpoint_dir=args.checkpoint_dir,
+        )
+
+        def on_round(rnd, loss):
+            if (rnd + 1) % 10 == 0 or rnd == 0:
+                print(f"  Round {rnd + 1}: avg_loss={loss:.4f}")
+
+        result = coordinator.train(total_steps=args.steps, callback=on_round)
+
+        print(f"\nTraining complete:")
+        print(f"  Final loss: {result.final_loss:.4f}")
+        print(f"  Total steps: {result.total_steps}")
+        print(f"  Wall time: {result.wall_time:.1f}s")
+        print(f"  Speedup vs single: {result.speedup_vs_single:.2f}x")
+        print(f"  Per-worker losses: {[f'{l:.4f}' for l in result.per_worker_losses]}")
+
+        # Save final model
+        if hasattr(coordinator, '_current_weights'):
+            brain = TextBrain(args.genome, len(coordinator.vocab))
+            weights = coordinator._current_weights
+            brain.w_slow = weights["w_slow"]
+            brain.w_fast = weights["w_fast"]
+            brain.R = weights["R"]
+            brain.b = weights["b"]
+            brain.theta = weights["theta"]
+        else:
+            brain = coordinator._ref_brain
+
+        print(f"Saving model to {args.out}...")
+        save_model(brain, coordinator.vocab, coordinator.itos, args.out)
 
     elif args.command == "neurogenesis":
         from .neurogenesis.compiler import GenomeCompiler, analyze_dataset

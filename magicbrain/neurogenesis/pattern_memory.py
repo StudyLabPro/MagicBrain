@@ -14,9 +14,21 @@ Pipeline:
 
 from __future__ import annotations
 
-from typing import NamedTuple
+import logging
+from dataclasses import dataclass
+from typing import Callable, NamedTuple, Optional
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class PatternQualityMetrics:
+    """Quality metrics for pattern memory."""
+    avg_recall_fidelity: float
+    interference_score: float
+    capacity_ratio: float
 
 
 class ImprintResult(NamedTuple):
@@ -95,6 +107,11 @@ class PatternMemory:
 
         return pattern
 
+    @property
+    def capacity_warning(self) -> bool:
+        """Return True when n_stored exceeds theoretical Storkey capacity (0.14 * N)."""
+        return self.n_stored > 0.14 * self.N
+
     def imprint_pattern(self, pattern: np.ndarray) -> bool:
         """Imprint a single pattern using Storkey learning rule.
 
@@ -114,33 +131,92 @@ class PatternMemory:
         # Use fast vectorized implementation
         self._imprint_fast(pattern)
         self.patterns.append(pattern.copy())
+
+        if self.capacity_warning:
+            logger.warning(
+                "Pattern memory capacity exceeded: %d patterns stored "
+                "(theoretical capacity ~%d for N=%d)",
+                self.n_stored,
+                self.theoretical_capacity,
+                self.N,
+            )
+
         return True
 
-    def imprint_patterns_batch(self, patterns: np.ndarray) -> ImprintResult:
+    def imprint_patterns_batch(
+        self,
+        patterns: np.ndarray,
+        progress_callback: Optional[Callable[[int, int], None]] = None,
+    ) -> ImprintResult:
         """Imprint multiple patterns efficiently.
 
         Uses vectorized Storkey rule for batch imprinting.
 
         Args:
             patterns: Array of patterns (M, N).
+            progress_callback: Optional callback(current, total) called after
+                each pattern is imprinted.
 
         Returns:
             ImprintResult with weight matrix and metadata.
         """
         M = patterns.shape[0]
+        n_to_store = min(M, self.max_patterns - self.n_stored)
 
-        # Vectorized Storkey: for each pattern
-        for m in range(min(M, self.max_patterns)):
+        for m in range(n_to_store):
             self._imprint_fast(patterns[m])
             self.patterns.append(patterns[m].copy())
+            if progress_callback is not None:
+                progress_callback(m + 1, n_to_store)
 
-        stored = min(M, self.max_patterns)
-        capacity_ratio = stored / max(1, self.max_patterns)
+        capacity_ratio = self.n_stored / max(1, self.max_patterns)
 
         return ImprintResult(
-            n_patterns=stored,
+            n_patterns=n_to_store,
             weight_matrix=self.W.copy(),
             patterns=np.array(self.patterns),
+            capacity_ratio=capacity_ratio,
+        )
+
+    def quality_metrics(self) -> PatternQualityMetrics:
+        """Compute quality metrics for the current state of pattern memory.
+
+        Returns:
+            PatternQualityMetrics with recall fidelity, interference, capacity ratio.
+        """
+        if not self.patterns:
+            return PatternQualityMetrics(
+                avg_recall_fidelity=0.0,
+                interference_score=0.0,
+                capacity_ratio=0.0,
+            )
+
+        # Recall fidelity: try recalling each stored pattern
+        total_sim = 0.0
+        for pat in self.patterns:
+            result = self.recall(pat)
+            total_sim += result.similarity
+        avg_fidelity = total_sim / len(self.patterns)
+
+        # Interference score: average pairwise cosine similarity of stored patterns
+        if len(self.patterns) >= 2:
+            total_interference = 0.0
+            count = 0
+            for i in range(len(self.patterns)):
+                for j in range(i + 1, len(self.patterns)):
+                    total_interference += abs(
+                        _cosine_similarity(self.patterns[i], self.patterns[j])
+                    )
+                    count += 1
+            interference = total_interference / count if count > 0 else 0.0
+        else:
+            interference = 0.0
+
+        capacity_ratio = self.n_stored / max(1, self.theoretical_capacity)
+
+        return PatternQualityMetrics(
+            avg_recall_fidelity=avg_fidelity,
+            interference_score=interference,
             capacity_ratio=capacity_ratio,
         )
 
