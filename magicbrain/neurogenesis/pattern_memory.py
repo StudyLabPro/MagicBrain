@@ -313,6 +313,11 @@ class PatternMemory:
         state_bp_out = state + mu
         state_binary = ((state_bp_out + 1.0) / 2.0).astype(np.float32)
         state_binary = np.clip(state_binary, 0.0, 1.0)
+        n_active = max(1, int(self.N * self.sparsity))
+        idx = np.argpartition(state_binary, -n_active)[-n_active:]
+        sparse = np.zeros_like(state_binary)
+        sparse[idx] = 1.0
+        state_binary = sparse
 
         # Find closest stored pattern
         best_idx = -1

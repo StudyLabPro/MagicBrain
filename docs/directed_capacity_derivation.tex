@@ -1,0 +1,32 @@
+\documentclass{article}
+\usepackage{amsmath,amssymb}
+\begin{document}
+
+\section*{Capacity scaling under weak correlations (note)}
+
+This note records a reviewer-facing derivation template for a capacity-style scaling law.
+It is not a theorem unless the assumptions are verified for the trained weight regime.
+
+\paragraph{Setup.}
+Let $h_i = \sum_j W_{ij} s_j$ be the local field for $s \in [-1,1]^N$.
+Assume $\mathbb E[W_{ij}]=0$ and $\mathrm{Var}(W_{ij})=\sigma^2$ for $i \ne j$ and $W_{ii}=0$.
+
+\paragraph{Assumption (weak-correlation approximation).}
+The derivation treats the effective off-diagonal weights as approximately independent.
+After local learning rules (e.g., Storkey-like updates), weights become correlated; therefore,
+any resulting closed-form capacity law must be treated as an asymptotic estimate unless
+the field variance scaling is empirically validated.
+
+\paragraph{Variance proxy.}
+Under independence, $\mathrm{Var}(h_i) \propto N \sigma^2$.
+Introducing a reciprocity parameter $\rho$ via symmetric pairs primarily changes the
+symmetry of $W$, i.e. the relative mass of its symmetric part $S=(W+W^\top)/2$
+and antisymmetric part $A=(W-W^\top)/2$, rather than changing the per-row variance
+of $W$ itself.
+
+\paragraph{Empirical validation.}
+We measure (i) $\mathrm{Var}(h_i)$ versus $N$ and (ii) the antisymmetry fraction
+$\|A\|_F / \|W\|_F$ and $\mathrm{corr}(W, W^\top)$ versus $\rho$, and verify that the
+generated or learned weight regimes satisfy the assumptions used in the estimate.
+
+\end{document}
