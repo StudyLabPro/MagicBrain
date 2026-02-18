@@ -4,10 +4,27 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "magicbrain"
-version = "0.7.0"
+version = "0.7.1"
 description = "Universal platform for heterogeneous and hybrid neural network architectures"
 readme = "README.md"
 requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [
+    {name = "MagicBrain Team", email = "team@studyninja.ru"},
+]
+keywords = ["spiking-neural-networks", "hopfield-networks", "neurogenesis", "genome-encoding", "formal-verification"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
 dependencies = [
     "numpy>=1.24.0",
 ]
@@ -71,6 +88,11 @@ dev = [
 all = [
     "magicbrain[jax,viz,platform,balansis,magic,service,dev]",
 ]
+
+[project.urls]
+Homepage = "https://github.com/studyninja/magicbrain"
+Repository = "https://github.com/studyninja/magicbrain"
+Documentation = "https://github.com/studyninja/magicbrain/tree/main/docs"
 
 [project.scripts]
 magicbrain = "magicbrain.cli:main"
