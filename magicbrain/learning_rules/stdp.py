@@ -32,6 +32,7 @@ class STDPRule:
         tau_minus: float = 20.0,
         w_min: float = -1.0,
         w_max: float = 1.0,
+        use_act: bool = False,
     ):
         """
         Args:
@@ -41,6 +42,7 @@ class STDPRule:
             tau_minus: Time constant for depression (ms)
             w_min: Minimum weight value
             w_max: Maximum weight value
+            use_act: If True, use ACT-compensated arithmetic for weight updates.
         """
         self.a_plus = a_plus
         self.a_minus = a_minus
@@ -48,6 +50,10 @@ class STDPRule:
         self.tau_minus = tau_minus
         self.w_min = w_min
         self.w_max = w_max
+        self._act = None
+        if use_act:
+            from magicbrain.integration.act_backend import ACTBackend
+            self._act = ACTBackend()
 
     def compute_weight_change(
         self,
@@ -93,7 +99,10 @@ class STDPRule:
         Returns:
             Updated weights
         """
-        new_weights = weights + weight_changes
+        if self._act is not None and self._act.available:
+            new_weights = self._act.add(weights, weight_changes)
+        else:
+            new_weights = weights + weight_changes
         return np.clip(new_weights, self.w_min, self.w_max)
 
 
@@ -117,6 +126,7 @@ class TripletSTDP:
         tau_y: float = 100.0,
         w_min: float = -1.0,
         w_max: float = 1.0,
+        use_act: bool = False,
     ):
         """
         Args:
@@ -130,6 +140,7 @@ class TripletSTDP:
             tau_y: Slow post-synaptic trace time constant
             w_min: Minimum weight
             w_max: Maximum weight
+            use_act: If True, use ACT-compensated arithmetic for weight updates.
         """
         self.a2_plus = a2_plus
         self.a2_minus = a2_minus
@@ -147,6 +158,11 @@ class TripletSTDP:
         self.r2 = None  # Slow pre-synaptic trace
         self.o1 = None  # Fast post-synaptic trace
         self.o2 = None  # Slow post-synaptic trace
+
+        self._act = None
+        if use_act:
+            from magicbrain.integration.act_backend import ACTBackend
+            self._act = ACTBackend()
 
     def initialize_traces(self, n_synapses: int):
         """Initialize spike traces."""
@@ -223,7 +239,10 @@ class TripletSTDP:
         weight_changes: np.ndarray,
     ) -> np.ndarray:
         """Apply weight changes with bounds."""
-        new_weights = weights + weight_changes
+        if self._act is not None and self._act.available:
+            new_weights = self._act.add(weights, weight_changes)
+        else:
+            new_weights = weights + weight_changes
         return np.clip(new_weights, self.w_min, self.w_max)
 
 

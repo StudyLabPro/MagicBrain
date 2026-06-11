@@ -55,7 +55,10 @@ def test_backend_conversion():
     assert np.allclose(np_arr, [1, 2, 3])
 
 
-@pytest.mark.skipif(True, reason="JAX optional dependency")
+@pytest.mark.skipif(
+    not __import__("importlib").util.find_spec("jax"),
+    reason="JAX not installed"
+)
 def test_jax_backend_available():
     """Test JAX backend if available."""
     try:

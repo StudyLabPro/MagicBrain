@@ -29,6 +29,7 @@ class NeuralDigitalTwin:
         learning_style: str = "adaptive",
         use_stdp: bool = False,
         initial_mastery: Optional[Dict[str, float]] = None,
+        use_act: bool = False,
     ):
         """
         Create Neural Digital Twin for a student.
@@ -38,12 +39,18 @@ class NeuralDigitalTwin:
             learning_style: Learning style (adaptive, visual, kinesthetic, etc.)
             use_stdp: Use STDP learning instead of dopamine
             initial_mastery: Initial mastery levels for topics
+            use_act: If True, use ACT-compensated arithmetic for mastery updates.
         """
         self.student_id = student_id
         self.learning_style = learning_style
         self.use_stdp = use_stdp
         self.created_at = datetime.now()
         self.last_updated = datetime.now()
+
+        self._act = None
+        if use_act:
+            from .act_backend import ACTBackend
+            self._act = ACTBackend()
 
         # Generate student-specific genome from ID
         self.genome = self._generate_student_genome(student_id, learning_style)
@@ -53,7 +60,7 @@ class NeuralDigitalTwin:
         if use_stdp:
             self.brain = STDPBrain(self.genome, vocab_size, stdp_type="triplet")
         else:
-            self.brain = TextBrain(self.genome, vocab_size)
+            self.brain = TextBrain(self.genome, vocab_size, use_act=use_act)
 
         # Monitor for tracking cognitive state
         self.monitor = LiveMonitor(log_every=10)
@@ -213,7 +220,12 @@ class NeuralDigitalTwin:
         # Ensure minimum progress for any learning activity
         learning_gain = max(learning_gain * 0.1, 0.01)
 
-        new_mastery = np.clip(old_mastery + learning_gain, 0.0, 1.0)
+        if self._act is not None and self._act.available:
+            m_arr = np.array([old_mastery], dtype=np.float32)
+            g_arr = np.array([learning_gain], dtype=np.float32)
+            new_mastery = float(np.clip(self._act.add(m_arr, g_arr)[0], 0.0, 1.0))
+        else:
+            new_mastery = float(np.clip(old_mastery + learning_gain, 0.0, 1.0))
         self.mastery_scores[topic_id] = new_mastery
 
         # Update last practice time
@@ -293,7 +305,13 @@ class NeuralDigitalTwin:
         # Exponential forgetting
         forgotten_amount = current_mastery * (1.0 - np.exp(-self.forgetting_rate * days_since_practice))
 
-        new_mastery = current_mastery - forgotten_amount
+        # Near-cancellation risk: current_mastery - forgotten_amount when mastery is small
+        if self._act is not None and self._act.available:
+            m_arr = np.array([current_mastery], dtype=np.float32)
+            f_arr = np.array([forgotten_amount], dtype=np.float32)
+            new_mastery = float(self._act.subtract(m_arr, f_arr)[0])
+        else:
+            new_mastery = current_mastery - forgotten_amount
 
         # Update stored mastery
         self.mastery_scores[topic_id] = max(0.0, new_mastery)
@@ -362,10 +380,14 @@ class NeuralDigitalTwin:
         overall_mastery = np.mean(list(self.mastery_scores.values())) if self.mastery_scores else 0.0
 
         # Neural metrics
+        if self._act is not None and self._act.available:
+            combined_w = self._act.add(self.brain.w_slow, self.brain.w_fast)
+        else:
+            combined_w = self.brain.w_slow + self.brain.w_fast
         neural_metrics = {
             "firing_rate": float(np.mean(self.brain.a)),
             "mean_theta": float(np.mean(self.brain.theta)),
-            "mean_weight": float(np.mean(np.abs(self.brain.w_slow + self.brain.w_fast))),
+            "mean_weight": float(np.mean(np.abs(combined_w))),
         }
 
         # Learning velocity (recent mastery changes)
@@ -426,11 +448,21 @@ class NeuralDigitalTwin:
             if is_correct:
                 # Correct answer: gain proportional to difficulty
                 gain = 0.02 + difficulty * 0.03  # 0.02 to 0.05
-                new_mastery = np.clip(old_mastery + gain, 0.0, 1.0)
+                if self._act is not None and self._act.available:
+                    m_arr = np.array([old_mastery], dtype=np.float32)
+                    g_arr = np.array([gain], dtype=np.float32)
+                    new_mastery = float(np.clip(self._act.add(m_arr, g_arr)[0], 0.0, 1.0))
+                else:
+                    new_mastery = float(np.clip(old_mastery + gain, 0.0, 1.0))
             else:
                 # Incorrect answer: small decrease scaled by difficulty
                 loss = 0.01 + (1.0 - difficulty) * 0.02  # harder questions penalize less
-                new_mastery = np.clip(old_mastery - loss, 0.0, 1.0)
+                if self._act is not None and self._act.available:
+                    m_arr = np.array([old_mastery], dtype=np.float32)
+                    l_arr = np.array([loss], dtype=np.float32)
+                    new_mastery = float(np.clip(self._act.subtract(m_arr, l_arr)[0], 0.0, 1.0))
+                else:
+                    new_mastery = float(np.clip(old_mastery - loss, 0.0, 1.0))
 
             self.mastery_scores[topic_id] = float(new_mastery)
             self.last_practice[topic_id] = timestamp
@@ -443,7 +475,12 @@ class NeuralDigitalTwin:
             # Lesson completion gives a small mastery bump
             old_mastery = self.mastery_scores.get(topic_id, 0.0)
             gain = 0.03 + difficulty * 0.02  # 0.03 to 0.05
-            new_mastery = np.clip(old_mastery + gain, 0.0, 1.0)
+            if self._act is not None and self._act.available:
+                m_arr = np.array([old_mastery], dtype=np.float32)
+                g_arr = np.array([gain], dtype=np.float32)
+                new_mastery = float(np.clip(self._act.add(m_arr, g_arr)[0], 0.0, 1.0))
+            else:
+                new_mastery = float(np.clip(old_mastery + gain, 0.0, 1.0))
             self.mastery_scores[topic_id] = float(new_mastery)
             self.last_practice[topic_id] = timestamp
 

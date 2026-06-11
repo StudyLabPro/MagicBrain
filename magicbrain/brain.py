@@ -106,6 +106,14 @@ class TextBrain:
         self.loss_ema = float(np.log(max(2, vocab_size)))
 
         self.recur_scale = float(1.0 / np.sqrt(float(self.K)))
+
+        # ACT-compensated normalization: rescale w_slow and R to their exact target std
+        # so the initialization error is O(ε) rather than O(E·ε) for large weight arrays.
+        if self._act is not None and self._act.available:
+            raw_std_w = float(np.std(self.w_slow)) + 1e-9
+            self.w_slow = self._act.scale(self.w_slow, 0.03 / raw_std_w)
+            raw_std_r = float(np.std(self.R)) + 1e-9
+            self.R = self._act.scale(self.R, 0.12 / raw_std_r)
         self.target_rate = float(self.p["k_active"]) / float(self.N)
 
         self.sens_fanout = int(max(10, min(16, int(self.p["k_active"]) // 4)))
@@ -153,6 +161,8 @@ class TextBrain:
 
     def _effective_w(self) -> np.ndarray:
         """Return the effective synaptic weight vector: w_slow + w_fast."""
+        if self._act is not None and self._act.available:
+            return self._act.add(self.w_slow, self.w_fast)
         return (self.w_slow + self.w_fast).astype(np.float32)
 
     def reset_state(self) -> None:
@@ -251,7 +261,10 @@ class TextBrain:
         for d in range(1, 6):
             self.buffers[d] *= bd
 
-        x = delayed_now - self.theta
+        if self._act is not None and self._act.available:
+            x = self._act.subtract(delayed_now, self.theta)
+        else:
+            x = delayed_now - self.theta
         if self.noise_std > 0:
             x += self.rng.normal(0, self.noise_std, size=self.N).astype(np.float32)
 
@@ -293,9 +306,10 @@ class TextBrain:
             np.clip(self.buffers[d], -5.0, 5.0, out=self.buffers[d])
 
         state = self.compute_state()
-        logits = (state @ self.R + self.b).astype(np.float32)
         if self._act is not None and self._act.available:
+            logits = self._act.matvec_add(state, self.R, self.b)
             return self._act.softmax(logits)
+        logits = (state @ self.R + self.b).astype(np.float32)
         return softmax(logits)
 
     def _consolidate(self) -> None:
@@ -308,7 +322,10 @@ class TextBrain:
         eps = float(self.p["cons_eps"])
         if eps <= 0:
             return
-        self.w_slow = ((1.0 - eps) * self.w_slow + eps * self.w_fast).astype(np.float32)
+        if self._act is not None and self._act.available:
+            self.w_slow = self._act.mix(self.w_slow, self.w_fast, eps)
+        else:
+            self.w_slow = ((1.0 - eps) * self.w_slow + eps * self.w_fast).astype(np.float32)
 
     def _decay_fast(self) -> None:
         """Exponentially decay fast weights toward zero."""

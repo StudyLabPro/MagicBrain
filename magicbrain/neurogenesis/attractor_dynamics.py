@@ -64,12 +64,17 @@ class AttractorDynamics:
         lambda_sparse: float = 0.01,
         max_iterations: int = 200,
         tolerance: float = 1e-4,
+        use_act: bool = False,
     ):
         self.tau = tau
         self.momentum = momentum
-        self.energy_fn = EnergyFunction(lambda_sparse=lambda_sparse)
+        self.energy_fn = EnergyFunction(lambda_sparse=lambda_sparse, use_act=use_act)
         self.max_iterations = max_iterations
         self.tolerance = tolerance
+        self._act = None
+        if use_act:
+            from magicbrain.integration.act_backend import ACTBackend
+            self._act = ACTBackend()
 
     def step(
         self,
@@ -97,9 +102,13 @@ class AttractorDynamics:
         new_state = _sigmoid_vec(h / self.tau)
 
         # Momentum mixing for smooth convergence
-        mixed = (self.momentum * state + (1.0 - self.momentum) * new_state).astype(
-            np.float32
-        )
+        if self._act is not None and self._act.available:
+            # mix(slow=state, fast=new_state, eps=1-momentum) = momentum*state + (1-m)*new_state
+            mixed = self._act.mix(state, new_state, 1.0 - self.momentum)
+        else:
+            mixed = (self.momentum * state + (1.0 - self.momentum) * new_state).astype(
+                np.float32
+            )
 
         return mixed
 

@@ -246,6 +246,36 @@ class LogitsToProbabilityConverter(TypeConverter):
         return exp_logits / exp_logits.sum(axis=-1, keepdims=True)
 
 
+class LogitsToDenseConverter(TypeConverter):
+    """Convert logits to dense vector (pass-through — logits are already dense)."""
+
+    def __init__(self):
+        super().__init__(OutputType.LOGITS, OutputType.DENSE)
+
+    def convert(self, data: np.ndarray, **kwargs) -> np.ndarray:
+        return np.asarray(data, dtype=np.float32)
+
+
+class ProbabilityToDenseConverter(TypeConverter):
+    """Convert probability distribution to dense vector (pass-through)."""
+
+    def __init__(self):
+        super().__init__(OutputType.PROBABILITY, OutputType.DENSE)
+
+    def convert(self, data: np.ndarray, **kwargs) -> np.ndarray:
+        return np.asarray(data, dtype=np.float32)
+
+
+class DenseToLogitsConverter(TypeConverter):
+    """Convert dense vector to logits (pass-through)."""
+
+    def __init__(self):
+        super().__init__(OutputType.DENSE, OutputType.LOGITS)
+
+    def convert(self, data: np.ndarray, **kwargs) -> np.ndarray:
+        return np.asarray(data, dtype=np.float32)
+
+
 class IdentityConverter(TypeConverter):
     """Identity converter (no transformation)."""
 
@@ -285,8 +315,11 @@ class ConverterRegistry:
         self.register(DenseToEmbeddingsConverter())
         self.register(EmbeddingsToDenseConverter())
 
-        # Logits -> Probability
+        # Logits <-> Probability / Dense
         self.register(LogitsToProbabilityConverter())
+        self.register(LogitsToDenseConverter())
+        self.register(ProbabilityToDenseConverter())
+        self.register(DenseToLogitsConverter())
 
         # Identity converters
         for output_type in OutputType:

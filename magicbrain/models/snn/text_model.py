@@ -31,7 +31,8 @@ class SNNTextModel(StatefulModel):
         vocab_size: int,
         model_id: Optional[str] = None,
         version: str = "1.0.0",
-        description: str = ""
+        description: str = "",
+        output_neural_state: bool = False,
     ):
         """
         Initialize SNN text model.
@@ -42,14 +43,20 @@ class SNNTextModel(StatefulModel):
             model_id: Unique model ID
             version: Model version
             description: Model description
+            output_neural_state: If True, forward() returns the brain's neural
+                activation state (N,) instead of logits (vocab_size,). Useful
+                when connecting to a DNN that processes the full neuron embedding.
         """
+        self.output_neural_state = output_neural_state
+        out_type = OutputType.DENSE if output_neural_state else OutputType.LOGITS
+
         # Create metadata
         metadata = ModelMetadata(
             model_id=model_id or f"snn_text_{id(self)}",
             model_type=ModelType.SNN,
             version=version,
             description=description or "Spiking Neural Network for text modeling",
-            output_type=OutputType.LOGITS,
+            output_type=out_type,
             framework="magicbrain",
         )
 
@@ -63,7 +70,8 @@ class SNNTextModel(StatefulModel):
         # Update metadata with brain parameters
         self.metadata.parameters_count = self._count_parameters()
         self.metadata.input_shape = (vocab_size,)
-        self.metadata.output_shape = (vocab_size,)
+        out_dim = self.brain.N if output_neural_state else vocab_size
+        self.metadata.output_shape = (out_dim,)
         self.metadata.extra = {
             "genome": genome,
             "N": self.brain.N,
@@ -101,15 +109,13 @@ class SNNTextModel(StatefulModel):
             token_id = input
         elif isinstance(input, np.ndarray):
             token_id = int(input.item()) if input.size == 1 else int(input[0])
+        elif isinstance(input, (list, tuple)):
+            token_id = int(input[0]) if input else 0
         else:
             token_id = int(input)
 
         # Forward through brain
         probs = self.brain.forward(token_id)
-
-        # Convert probabilities to logits (inverse softmax)
-        # logits = log(probs)
-        logits = np.log(probs + 1e-10)
 
         # Update state
         self._state.internal_state = {
@@ -127,7 +133,12 @@ class SNNTextModel(StatefulModel):
             "mean_abs_w": self.brain.mean_abs_w(),
         }
 
-        return logits
+        if self.output_neural_state:
+            # Return full neural activation state for downstream DNN
+            return self.brain.compute_state().astype(np.float32)
+
+        # Default: return logits
+        return np.log(probs + 1e-10)
 
     def step(self, input: Any, **kwargs) -> np.ndarray:
         """

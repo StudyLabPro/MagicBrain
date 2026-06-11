@@ -60,6 +60,7 @@ class PatternMemory:
         N: int,
         sparsity: float = 0.1,
         max_capacity_fraction: float = 0.12,
+        use_act: bool = False,
     ):
         """Initialize pattern memory.
 
@@ -67,6 +68,7 @@ class PatternMemory:
             N: Number of neurons.
             sparsity: Target fraction of active neurons per pattern.
             max_capacity_fraction: Max patterns as fraction of N (safety limit).
+            use_act: If True, use ACT-compensated arithmetic for weight updates.
         """
         self.N = N
         self.sparsity = sparsity
@@ -74,6 +76,11 @@ class PatternMemory:
 
         self.W = np.zeros((N, N), dtype=np.float32)
         self.patterns: list[np.ndarray] = []
+
+        self._act = None
+        if use_act:
+            from magicbrain.integration.act_backend import ACTBackend
+            self._act = ACTBackend()
 
     def text_to_pattern(
         self,
@@ -249,13 +256,24 @@ class PatternMemory:
         ph = p @ h.T
         hp = h @ p.T
 
-        dW = (pp - ph - hp) / N
+        if self._act is not None and self._act.available:
+            # Compensated subtraction: pp - ph - hp
+            dW_num = self._act.subtract(
+                self._act.subtract(pp.astype(np.float64), ph.astype(np.float64)),
+                hp.astype(np.float64),
+            ) / N
+            dW = dW_num.astype(np.float32)
+        else:
+            dW = (pp - ph - hp) / N
 
         # Symmetrize and zero diagonal
         dW = 0.5 * (dW + dW.T)
         np.fill_diagonal(dW, 0.0)
 
-        self.W += dW.astype(np.float32)
+        if self._act is not None and self._act.available:
+            self.W = self._act.add(self.W, dW.astype(np.float32)).astype(np.float32)
+        else:
+            self.W += dW.astype(np.float32)
 
     def recall(
         self,

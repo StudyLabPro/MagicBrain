@@ -32,8 +32,12 @@ class EnergyFunction:
     Attractors are states where dE/ds = 0 and d^2E/ds^2 > 0.
     """
 
-    def __init__(self, lambda_sparse: float = 0.01):
+    def __init__(self, lambda_sparse: float = 0.01, use_act: bool = False):
         self.lambda_sparse = lambda_sparse
+        self._act = None
+        if use_act:
+            from magicbrain.integration.act_backend import ACTBackend
+            self._act = ACTBackend()
 
     def energy(
         self,
@@ -59,15 +63,24 @@ class EnergyFunction:
         """
         if src is not None and dst is not None:
             # Sparse edge-list format
-            interaction = -0.5 * np.sum(
-                state[src] * weights * state[dst]
-            )
+            products = state[src] * weights * state[dst]
+            if self._act is not None and self._act.available:
+                interaction = -0.5 * self._act.kahan_sum(products)
+            else:
+                interaction = -0.5 * float(np.sum(products))
         else:
             # Dense matrix format
-            interaction = -0.5 * float(state @ weights @ state)
+            if self._act is not None and self._act.available:
+                interaction = -0.5 * self._act.quadratic_form(state, weights)
+            else:
+                interaction = -0.5 * float(state @ weights @ state)
 
-        bias = -float(theta @ state)
-        sparsity = self.lambda_sparse * float(np.sum(np.abs(state)))
+        if self._act is not None and self._act.available:
+            bias = -self._act.dot(theta, state)
+            sparsity = self.lambda_sparse * self._act.kahan_sum(np.abs(state))
+        else:
+            bias = -float(theta @ state)
+            sparsity = self.lambda_sparse * float(np.sum(np.abs(state)))
 
         return float(interaction + bias + sparsity)
 
@@ -81,14 +94,23 @@ class EnergyFunction:
     ) -> EnergyState:
         """Compute energy with detailed decomposition."""
         if src is not None and dst is not None:
-            interaction = -0.5 * float(np.sum(
-                state[src] * weights * state[dst]
-            ))
+            products = state[src] * weights * state[dst]
+            if self._act is not None and self._act.available:
+                interaction = -0.5 * self._act.kahan_sum(products)
+            else:
+                interaction = -0.5 * float(np.sum(products))
         else:
-            interaction = -0.5 * float(state @ weights @ state)
+            if self._act is not None and self._act.available:
+                interaction = -0.5 * self._act.quadratic_form(state, weights)
+            else:
+                interaction = -0.5 * float(state @ weights @ state)
 
-        bias = -float(theta @ state)
-        sparsity = self.lambda_sparse * float(np.sum(np.abs(state)))
+        if self._act is not None and self._act.available:
+            bias = -self._act.dot(theta, state)
+            sparsity = self.lambda_sparse * self._act.kahan_sum(np.abs(state))
+        else:
+            bias = -float(theta @ state)
+            sparsity = self.lambda_sparse * float(np.sum(np.abs(state)))
         total = interaction + bias + sparsity
 
         return EnergyState(

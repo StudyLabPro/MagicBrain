@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 import json
 from pathlib import Path
 
+from .act_metrics import ACTMetricsTracker, ACTSnapshot
+
 
 @dataclass
 class TrainingMetrics:
@@ -29,10 +31,19 @@ class LiveMonitor:
     Collects and stores metrics without visualization dependencies.
     """
 
-    def __init__(self, log_every: int = 100):
+    def __init__(self, log_every: int = 100, track_act: bool = False):
+        """
+        Args:
+            log_every: Log interval in steps.
+            track_act: If True, attach an ACTMetricsTracker for numerical
+                quality monitoring. Activates automatically when the brain
+                passed to ``record()`` has an active ACT backend.
+        """
         self.log_every = log_every
         self.metrics_history: List[TrainingMetrics] = []
         self.current_step = 0
+        self._track_act = track_act
+        self.act_tracker: Optional[ACTMetricsTracker] = None
 
     def record(self, brain, loss: float, step: int) -> TrainingMetrics:
         """
@@ -64,6 +75,15 @@ class LiveMonitor:
         self.metrics_history.append(metrics)
         self.current_step = step
 
+        # Lazily attach ACT tracker on first call if brain has an ACT backend
+        if self._track_act and self.act_tracker is None:
+            act_backend = getattr(brain, "_act", None)
+            if act_backend is not None:
+                self.act_tracker = ACTMetricsTracker(act_backend)
+
+        if self.act_tracker is not None:
+            self.act_tracker.record(brain, step)
+
         return metrics
 
     def should_log(self, step: int) -> bool:
@@ -84,7 +104,7 @@ class LiveMonitor:
         dopamines = [m.dopamine for m in recent]
         firing_rates = [m.firing_rate for m in recent]
 
-        return {
+        summary = {
             "total_steps": self.current_step,
             "total_records": len(self.metrics_history),
             "recent_avg_loss": sum(losses) / len(losses) if losses else 0.0,
@@ -92,6 +112,9 @@ class LiveMonitor:
             "recent_avg_firing_rate": sum(firing_rates) / len(firing_rates) if firing_rates else 0.0,
             "final_metrics": recent[-1].__dict__ if recent else {},
         }
+        if self.act_tracker is not None:
+            summary["act_metrics"] = self.act_tracker.summary()
+        return summary
 
     def save(self, path: str):
         """Save metrics history to JSON file."""

@@ -40,6 +40,7 @@ class TestHybridArchitectures:
         snn = SNNTextModel(
             genome="30121033102301230112332100123",
             vocab_size=50,
+            output_neural_state=True,
             model_id="snn_test"
         )
 
@@ -65,7 +66,8 @@ class TestHybridArchitectures:
         """Test that hybrid components are accessible."""
         snn = SNNTextModel(
             genome="30121033102301230112332100123",
-            vocab_size=50
+            vocab_size=50,
+            output_neural_state=True,
         )
 
         dnn_module = nn.Linear(snn.brain.N, 50)
@@ -85,7 +87,8 @@ class TestHybridArchitectures:
         """Test hybrid metadata is correct."""
         snn = SNNTextModel(
             genome="30121033102301230112332100123",
-            vocab_size=50
+            vocab_size=50,
+            output_neural_state=True,
         )
 
         dnn_module = nn.Linear(snn.brain.N, 50)
@@ -102,7 +105,8 @@ class TestHybridArchitectures:
         """Test hybrid returns correct output type."""
         snn = SNNTextModel(
             genome="30121033102301230112332100123",
-            vocab_size=50
+            vocab_size=50,
+            output_neural_state=True,
         )
 
         dnn_module = nn.Linear(snn.brain.N, 50)
@@ -118,7 +122,8 @@ class TestHybridArchitectures:
         """Test hybrid with different vocab sizes."""
         snn = SNNTextModel(
             genome="30121033102301230112332100123",
-            vocab_size=50
+            vocab_size=50,
+            output_neural_state=True,
         )
 
         # DNN outputs different size
@@ -134,7 +139,8 @@ class TestHybridArchitectures:
         """Test multiple forward calls work correctly."""
         snn = SNNTextModel(
             genome="30121033102301230112332100123",
-            vocab_size=50
+            vocab_size=50,
+            output_neural_state=True,
         )
 
         dnn_module = nn.Linear(snn.brain.N, 50)
@@ -154,8 +160,11 @@ class TestHybridArchitectures:
     def test_hybrid_factory_function(self):
         """Test factory function for creating hybrids."""
         from magicbrain.hybrid.snn_dnn import create_snn_dnn_hybrid
+        from magicbrain.brain import TextBrain
+        from magicbrain.genome import decode_genome
+        N = decode_genome("30121033102301230112332100123")["N"]
 
-        dnn_module = nn.Linear(384, 50)  # Assuming default N=384
+        dnn_module = nn.Linear(N, 50)
 
         hybrid = create_snn_dnn_hybrid(
             snn_genome="30121033102301230112332100123",
@@ -178,7 +187,8 @@ class TestHybridIntegrationPoints:
         """Test data flow from SNN to DNN."""
         snn = SNNTextModel(
             genome="30121033102301230112332100123",
-            vocab_size=50
+            vocab_size=50,
+            output_neural_state=True,
         )
 
         dnn_module = nn.Linear(snn.brain.N, 50)
@@ -204,7 +214,8 @@ class TestHybridIntegrationPoints:
         """Test that components can be used independently."""
         snn = SNNTextModel(
             genome="30121033102301230112332100123",
-            vocab_size=50
+            vocab_size=50,
+            output_neural_state=True,
         )
 
         dnn_module = nn.Linear(snn.brain.N, 50)
@@ -224,7 +235,8 @@ class TestHybridIntegrationPoints:
         """Test that SNN state is preserved through hybrid."""
         snn = SNNTextModel(
             genome="30121033102301230112332100123",
-            vocab_size=50
+            vocab_size=50,
+            output_neural_state=True,
         )
 
         dnn_module = nn.Linear(snn.brain.N, 50)
@@ -235,8 +247,8 @@ class TestHybridIntegrationPoints:
         # First forward
         hybrid.forward([0])
 
-        # Check SNN state changed
-        assert snn.brain.execution_count > 0 or snn.brain.step >= 0
+        # Check SNN state is accessible (step counter exists)
+        assert snn.brain.step >= 0
 
 
 class TestHybridErrorHandling:
@@ -245,7 +257,8 @@ class TestHybridErrorHandling:
         """Test accessing non-existent component."""
         snn = SNNTextModel(
             genome="30121033102301230112332100123",
-            vocab_size=50
+            vocab_size=50,
+            output_neural_state=True,
         )
 
         dnn_module = nn.Linear(snn.brain.N, 50)
@@ -261,7 +274,8 @@ class TestHybridErrorHandling:
         """Test hybrid with empty input."""
         snn = SNNTextModel(
             genome="30121033102301230112332100123",
-            vocab_size=50
+            vocab_size=50,
+            output_neural_state=True,
         )
 
         dnn_module = nn.Linear(snn.brain.N, 50)

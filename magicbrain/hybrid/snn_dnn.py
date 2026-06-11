@@ -52,9 +52,15 @@ def create_snn_dnn_hybrid(
     snn_genome: str,
     vocab_size: int,
     dnn_module,
-    model_id: Optional[str] = None
+    model_id: Optional[str] = None,
+    output_neural_state: bool = True,
 ) -> SNNDNNHybrid:
-    """Quick factory for SNN+DNN hybrid."""
-    snn = SNNTextModel(snn_genome, vocab_size, model_id="snn_enc")
+    """Quick factory for SNN+DNN hybrid.
+
+    By default uses output_neural_state=True so the DNN receives the full
+    neural activation vector (N,) rather than the output logits (vocab_size,).
+    """
+    snn = SNNTextModel(snn_genome, vocab_size, model_id="snn_enc",
+                       output_neural_state=output_neural_state)
     dnn = DNNModel(dnn_module, model_id="dnn_dec")
     return SNNDNNHybrid(snn, dnn, model_id=model_id)

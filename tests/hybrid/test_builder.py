@@ -194,7 +194,8 @@ class TestTemplates:
         """Test SNN→DNN pipeline template."""
         snn = SNNTextModel(
             genome="30121033102301230112332100123",
-            vocab_size=50
+            vocab_size=50,
+            output_neural_state=True,
         )
 
         dnn = DNNModel(nn.Linear(snn.brain.N, 50))
@@ -212,7 +213,8 @@ class TestTemplates:
         """Test encoder→decoder template."""
         encoder = SNNTextModel(
             genome="30121033102301230112332100123",
-            vocab_size=50
+            vocab_size=50,
+            output_neural_state=True,
         )
 
         decoder = DNNModel(nn.Linear(encoder.brain.N, 50))
