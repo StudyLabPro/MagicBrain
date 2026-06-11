@@ -48,7 +48,7 @@ def test_save_load(tmp_path):
     path = tmp_path / "model.npz"
     save_model(brain, vocab, itos, str(path))
     
-    loaded_brain, l_stoi, l_itos = load_model(str(path))
+    loaded_brain, l_stoi, l_itos, _ = load_model(str(path))
     
     assert loaded_brain.step == 123
     assert loaded_brain.genome_str == g

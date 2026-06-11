@@ -4,12 +4,72 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "magicbrain"
-version = "0.1.0"
-description = "Spiking DNA-based brain with structural plasticity"
+version = "0.7.0"
+description = "Universal platform for heterogeneous and hybrid neural network architectures"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
     "numpy>=1.24.0",
+]
+
+[project.optional-dependencies]
+# Core SNN functionality
+jax = [
+    "jax>=0.4.0",
+    "jaxlib>=0.4.0",
+]
+
+# Visualization
+viz = [
+    "matplotlib>=3.5.0",
+    "plotly>=5.0.0",
+]
+
+# Platform - PyTorch models (DNN, CNN, RNN)
+torch = [
+    "torch>=2.0.0",
+    "torchvision>=0.15.0",
+]
+
+# Platform - Transformers
+transformers = [
+    "transformers>=4.30.0",
+    "tokenizers>=0.13.0",
+]
+
+# Platform - Full (all model types)
+platform = [
+    "magicbrain[torch,transformers]",
+]
+
+# Balansis - Absolute Compensation Theory for numerically stable computations
+balansis = [
+    "balansis>=0.1.0",
+]
+
+# MAGIC SDK for human-AI collaboration
+magic = [
+    "studyninja-magic-sdk>=0.1.0",
+]
+
+# API service dependencies
+service = [
+    "fastapi>=0.109.0",
+    "uvicorn[standard]>=0.27.0",
+    "pydantic-settings>=2.0.0",
+    "httpx>=0.25.0",
+]
+
+# Development tools
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.1.0",
+]
+
+# All features
+all = [
+    "magicbrain[jax,viz,platform,balansis,magic,service,dev]",
 ]
 
 [project.scripts]
