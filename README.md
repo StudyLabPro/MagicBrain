@@ -1,61 +1,49 @@
-# 🧠 MagicBrain Platform
+# MagicBrain Platform
 
-<div align="center">
-
-![Version](https://img.shields.io/badge/version-0.7.0-blue.svg)
+![Version](https://img.shields.io/badge/version-0.7.1-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.9+-green.svg)
 ![Tests](https://img.shields.io/badge/tests-237%20passed-brightgreen.svg)
 ![Coverage](https://img.shields.io/badge/coverage-90%25+-brightgreen.svg)
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Lean4](https://img.shields.io/badge/Lean4-21%20theorems-blueviolet.svg)
+![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)
+![MAGIC Level](https://img.shields.io/badge/MAGIC-Level%202%20MetaBrain-orange.svg)
 
 **Универсальная платформа для гетерогенных и гибридных нейросетевых архитектур**
 
-[Документация](./PROJECT_COMPLETE.md) • [Changelog](./CHANGELOG.md) • [Releases](https://github.com/AndrewHakmi/MagicBrain/releases) • [Issues](https://github.com/AndrewHakmi/MagicBrain/issues)
-
-</div>
+[Документация](./PROJECT_COMPLETE.md) | [Changelog](./CHANGELOG.md) | [Formal Proofs](./formal/README.md) | [API Docs](./api/README_API.md)
 
 ---
 
-## 🚀 О проекте
+## О проекте
 
-**MagicBrain Platform** - это универсальная платформа для создания, управления и оркестрации **гетерогенных и гибридных нейросетевых архитектур**. Платформа позволяет seamless интегрировать разные типы нейронных сетей (SNN, DNN, Transformers, CNN, RNN) в единые системы.
+**MagicBrain** — исследовательский сервис уровня **MAGIC Level 2 (MetaBrain)** в экосистеме [StudyNinja-Eco](https://github.com/XTeam-Pro/StudyNinja-Eco). Реализует живую AGI-память через биологически правдоподобные спайковые нейронные сети (SNN), геномное кодирование, нейрогенез и цифровые двойники студентов.
 
-### ✨ Ключевые возможности
+### Ключевые компоненты
 
-- 🧩 **5 типов моделей**: SNN, DNN, Transformer, CNN, RNN
-- 🔄 **Automatic type conversion**: Spikes ↔ Dense ↔ Embeddings ↔ Logits
-- 🎼 **Multi-model orchestration**: Sequential, Parallel, Pipeline стратегии
-- 🧬 **Unlimited hybrid combinations**: создавайте любые комбинации моделей
-- 🏗️ **Compositional API**: HybridBuilder с fluent interface
-- ⚡ **Spiking Attention**: attention mechanism в spike domain
-- 🧪 **57 тестов** с покрытием >90%
-- 📦 **Production-ready** infrastructure
+- **TextBrain (SNN)** — спайковая нейронная сеть с разреженной активацией (~5%), дофамин-модулируемым обучением по Хеббу и гомеостатической адаптацией порогов
+- **Genome System** — DNA-кодирование гиперпараметров: base-4 строка (24-72+ символа) детерминированно задаёт всю архитектуру
+- **NeuroGenesis Engine** — 9 модулей: датасет → геном → 3D-морфогенез → обучение → реконструкция
+- **Digital Twins** — NeuralDigitalTwin: освоение тем, адаптация сложности, прогноз когнитивного состояния студента
+- **Platform Framework** — оркестрация 5 типов моделей (SNN, DNN, Transformer, CNN, RNN), 7 стратегий выполнения
+- **Formal Verification** — 21 теорема в Lean4 для Hopfield-динамики (0 sorry, 0 ошибок)
 
 ---
 
-## 📦 Установка
+## Установка
 
 ```bash
-# Базовая установка (только SNN)
-pip install magicbrain
-
-# С поддержкой PyTorch моделей (DNN, CNN, RNN)
-pip install magicbrain[torch]
-
-# С поддержкой Transformers
-pip install magicbrain[transformers]
-
-# Полная платформа (все типы моделей)
-pip install magicbrain[platform]
-
-# Все возможности (включая JAX, визуализацию, dev tools)
-pip install magicbrain[all]
+pip install magicbrain               # только SNN + NumPy
+pip install magicbrain[torch]        # + PyTorch (DNN, CNN, RNN, Hybrid)
+pip install magicbrain[transformers] # + Hugging Face
+pip install magicbrain[balansis]     # + ACT-компенсированная арифметика
+pip install magicbrain[platform]     # полная платформа
+pip install magicbrain[all]          # всё, включая JAX и dev-инструменты
 ```
 
 ### Разработка
 
 ```bash
-git clone https://github.com/AndrewHakmi/MagicBrain.git
+git clone https://github.com/XTeam-Pro/MagicBrain.git
 cd MagicBrain
 pip install -e ".[dev]"
 pytest
@@ -63,33 +51,29 @@ pytest
 
 ### REST API
 
-MagicBrain включает FastAPI сервис для удалённого управления моделями:
-
 ```bash
-# Запуск API сервера
-cd api
-python main.py
-
-# Или с uvicorn в production
-uvicorn app.api.main:app --host 0.0.0.0 --port 8001
+uvicorn api.app.api.main:app --host 0.0.0.0 --port 8004
+# Swagger: http://localhost:8004/docs
 ```
-
-API доступен по адресу: `http://localhost:8001/docs`
-
-**Основные эндпоинты:**
-- `POST /api/v1/models/` - Создание модели
-- `POST /api/v1/models/{model_id}/train` - Обучение
-- `POST /api/v1/models/{model_id}/generate` - Генерация текста
-- `GET /api/v1/models/{model_id}` - Информация о модели
-- `DELETE /api/v1/models/{model_id}` - Удаление модели
-
-Подробная документация: [`api/README_API.md`](./api/README_API.md)
 
 ---
 
-## 🎯 Quick Start
+## Быстрый старт
 
-### 1. Простой Hybrid Pipeline
+### SNN через геном
+
+```python
+from magicbrain import TextBrain
+from magicbrain.tasks.text_task import train_loop
+from magicbrain.sampling import sample_text
+
+genome = "30121033102301230112332100123"
+brain = TextBrain(genome, vocab_size=50)
+train_loop(brain, text="Your training text", steps=10000)
+generated = sample_text(brain, seed="Hello", n_tokens=100, temperature=0.8)
+```
+
+### Hybrid Pipeline
 
 ```python
 from magicbrain.platform import ModelOrchestrator, ExecutionStrategy
@@ -97,26 +81,21 @@ from magicbrain.models.snn import SNNTextModel
 from magicbrain.models.dnn import DNNModel
 import torch.nn as nn
 
-# Создаем модели
 snn = SNNTextModel(genome="30121033102301230112332100123", vocab_size=50)
-dnn = DNNModel(nn.Linear(384, 10))  # PyTorch модель
+dnn = DNNModel(nn.Linear(384, 10))
 
-# Оркестрация
 orch = ModelOrchestrator()
-orch.add_model(snn, model_id="snn_encoder")
-orch.add_model(dnn, model_id="dnn_decoder")
-orch.connect("snn_encoder", "dnn_decoder")
-
-# Выполнение
+orch.add_model(snn, model_id="encoder")
+orch.add_model(dnn, model_id="decoder")
+orch.connect("encoder", "decoder")
 result = orch.execute(input_data, strategy=ExecutionStrategy.SEQUENTIAL)
 ```
 
-### 2. Compositional Hybrid API
+### HybridBuilder (fluent API)
 
 ```python
 from magicbrain.hybrid import HybridBuilder
 
-# Fluent interface для построения гибридных архитектур
 hybrid = (HybridBuilder()
     .add("encoder", snn_model)
     .add("transformer", bert_model)
@@ -126,266 +105,241 @@ hybrid = (HybridBuilder()
     .build("complex_hybrid"))
 
 output = hybrid.forward(input_data)
-print(hybrid.visualize_graph())
 ```
 
-### 3. Vision + Language Hybrid
+### NeuroGenesis
 
 ```python
-from magicbrain.hybrid import HybridBuilder
-from magicbrain.models.cnn import CNNModel
-from torchvision.models import resnet50
+from magicbrain.neurogenesis.compiler import GenomeCompiler
+from magicbrain.neurogenesis.pipeline import NeurogenesisPipeline
 
-# Multi-modal система
-vision_language = (HybridBuilder()
-    .add("cnn", CNNModel(resnet50()))        # Image features
-    .add("snn", snn_encoder)                 # Spike encoding
-    .add("transformer", bert)                # Language understanding
-    .connect("cnn", "snn")
-    .connect("snn", "transformer")
-    .build("vision_language_system"))
+compiler = GenomeCompiler(strategy="hybrid")
+genome = compiler.compile(dataset="path/to/text.txt")
 
-result = vision_language.forward(image)
+pipeline = NeurogenesisPipeline()
+result = pipeline.run(dataset, genome_v2=True)
+# result: обученный мозг + метрики реконструкции
 ```
 
-### 4. Spiking Neural Network
+### Digital Twins
 
 ```python
-from magicbrain import TextBrain
-from magicbrain.tasks.text_task import train_loop
+from magicbrain.integration.neural_digital_twin import NeuralDigitalTwin
 
-# Создание SNN с ДНК-кодированием
-genome = "30121033102301230112332100123"
-brain = TextBrain(genome, vocab_size=50)
-
-# Обучение
-train_loop(brain, text="Your training text", steps=10000)
-
-# Генерация
-from magicbrain.sampling import sample_text
-generated = sample_text(brain, seed="Hello", n_tokens=100, temperature=0.8)
+twin = NeuralDigitalTwin(student_id="student_42", learning_style="visual")
+twin.learn_topic(topic_id="algebra_linear", steps=200, difficulty=0.6)
+mastery = twin.get_mastery(topic_id="algebra_linear")
+state = twin.get_cognitive_state()  # attention, confusion, fatigue
 ```
 
 ---
 
-## 🏗️ Архитектура
+## Структура модулей
 
-```
-╔═══════════════════════════════════════════════════════════╗
-║           MagicBrain Platform v0.6.0                      ║
-╠═══════════════════════════════════════════════════════════╣
-║                                                           ║
-║  ┌─────────────────┐    ┌──────────────────┐            ║
-║  │  Model Types    │    │   Infrastructure │            ║
-║  ├─────────────────┤    ├──────────────────┤            ║
-║  │ • SNN           │    │ • Registry       │            ║
-║  │ • DNN           │    │ • Orchestrator   │            ║
-║  │ • Transformers  │    │ • MessageBus     │            ║
-║  │ • CNN           │    │ • Converters     │            ║
-║  │ • RNN/LSTM      │    │ • Model Zoo      │            ║
-║  └─────────────────┘    └──────────────────┘            ║
-║                                                           ║
-║  ┌─────────────────────────────────────────┐            ║
-║  │        Hybrid Architectures             │            ║
-║  ├─────────────────────────────────────────┤            ║
-║  │ • SNN + DNN                              │            ║
-║  │ • SNN + Transformer                      │            ║
-║  │ • CNN + SNN                              │            ║
-║  │ • Custom (HybridBuilder)                 │            ║
-║  │ • Spiking Attention                      │            ║
-║  └─────────────────────────────────────────┘            ║
-║                                                           ║
-╚═══════════════════════════════════════════════════════════╝
-```
+### Ядро SNN
 
-### Основные компоненты
+| Модуль | Назначение |
+|--------|-----------|
+| `brain.py` | TextBrain: sparse top-k, dual weights (slow/fast), dopamine, axonal delays |
+| `genome.py` | Геномное кодирование, `decode_genome()` |
+| `sampling.py` | Генерация текста (temperature, top-k, top-p) |
+| `graph.py` | 3D граф нейронов с аксональными задержками (1-5 шагов) |
+| `io.py` | Сохранение/загрузка моделей (.npz) |
 
-**Phase 1: Platform Foundation**
-- `ModelInterface` - универсальная абстракция для всех моделей
-- `ModelRegistry` - версионирование, metadata, зависимости
-- `Communication Layer` - MessageBus + TypeConverters
-- `ModelOrchestrator` - multi-model execution
-- `Model Zoo` - управление pretrained моделями
+### NeuroGenesis Engine (`neurogenesis/`)
 
-**Phase 2: Multi-Model Support**
-- `DNNModel` - PyTorch DNN adapter
-- `TransformerModel` - Hugging Face integration
-- `CNNModel` - torchvision models
-- `RNNModel` - LSTM/GRU с stateful execution
+| Модуль | Назначение |
+|--------|-----------|
+| `compiler.py` | GenomeCompiler: датасет → геном (hash / statistical / hybrid) |
+| `energy.py` | Hopfield energy: E(s) = -1/2 s'Ws - theta's + lambda||s||_1 |
+| `attractor_dynamics.py` | Динамика к аттракторам, поиск бассейнов притяжения |
+| `cppn.py` | CPPN: координаты → веса (8 базисных функций: sin, cos, gaussian, ...) |
+| `development.py` | 3D морфогенез + синаптогенез + созревание ткани |
+| `pattern_memory.py` | Ассоциативная память Хопфилда (Storkey rule, ~0.14N паттернов) |
+| `reconstruction.py` | 4 режима: autoregressive, attractor, cue-based, generation |
+| `genome_v2.py` | Расширенный формат 72+: Topology + CPPN + Attractor + Patterns |
+| `pipeline.py` | E2E пайплайн: датасет → компиляция → развитие → обучение → оценка |
 
-**Phase 3: Hybrid Architectures**
-- `HybridArchitecture` - базовый класс для гибридов
-- `SNNDNNHybrid`, `SNNTransformerHybrid`, `CNNSNNHybrid` - готовые комбинации
-- `SpikingAttention` - attention в spike domain
-- `HybridBuilder` - compositional API с fluent interface
+### Platform Framework (`platform/`)
 
----
+| Компонент | Назначение |
+|-----------|-----------|
+| `ModelInterface` | Универсальная абстракция: SNN, DNN, CNN, RNN, Transformer, Hybrid, Ensemble |
+| `ModelOrchestrator` | 7 стратегий: Sequential, Parallel, Pipeline, Hierarchical, Feedback, Cascaded, MoE |
+| `ModelRegistry` | Версионирование, метаданные, dependency tracking |
+| `MessageBus` | Маршрутизация между моделями с автоматической конвертацией типов |
+| TypeConverters | Spikes <-> Dense <-> Embeddings <-> Logits |
 
-## 💡 Use Cases
+### Digital Twins (`integration/`)
 
-### 🧪 Neuromorphic Computing
-Создание энергоэффективных систем с биологически правдоподобными спайковыми сетями.
+| Модуль | Назначение |
+|--------|-----------|
+| `neural_digital_twin.py` | NeuralDigitalTwin: геном из student_id, 4 стиля, forgetting dynamics |
+| `redis_twin_store.py` | Redis-персистентность состояния двойников |
+| `knowledgebase_client.py` | HTTP-клиент для синхронизации с KnowledgeBaseAI |
+| `act_backend.py` | Интеграция с Balansis (ACT-компенсированная арифметика весов) |
 
-### 🤖 Multi-Modal AI
-Интеграция vision (CNN) + language (Transformer) + temporal processing (SNN/RNN).
+### Дополнительные модули
 
-### 🧠 Brain-Inspired Architectures
-Моделирование когнитивных процессов через гибридные системы.
-
-### 📚 Adaptive Learning Systems
-Использование в StudyNinja для моделирования процессов обучения студентов.
-
-### 🔬 AI Research
-Исследование гетерогенных архитектур и neuromorphic algorithms.
+| Каталог | Содержание |
+|---------|-----------|
+| `evolution/` | SimpleGA (tournament selection), GenomeMutator (6 операторов), FitnessEvaluator |
+| `diagnostics/` | LiveMonitor, NeuronalDynamics, PlasticityTracker, SynapticMetrics |
+| `learning_rules/` | STDP, STDPBrain |
+| `backends/` | NumPy (default), JAX (optional) |
+| `hybrid/` | HybridArchitecture, HybridBuilder, SNN+DNN/Transformer/CNN, SpikingAttention |
+| `architectures/` | HierarchicalBrain (multi-layer SNN) |
+| `training/` | Coordinator, Checkpointing, DataPartitioner, Worker |
+| `zoo/` | Model Zoo — управление предобученными моделями |
 
 ---
 
-## 📚 Документация
+## REST API
 
-- **[PROJECT_COMPLETE.md](./PROJECT_COMPLETE.md)** - Полный отчет о проекте с примерами
-- **[PLATFORM_VISION.md](./PLATFORM_VISION.md)** - Видение платформы и roadmap
-- **[CHANGELOG.md](./CHANGELOG.md)** - История версий
-- **[CLAUDE.md](./CLAUDE.md)** - Руководство для разработчиков
-- **[magicbrain/platform/README.md](./magicbrain/platform/README.md)** - Детали платформы
-- **[examples/](./examples/)** - Рабочие примеры кода
+FastAPI-микросервис, порт `8004` в экосистеме.
+
+| Группа | Основные эндпоинты |
+|--------|-------------------|
+| `/api/v1/models` | CRUD моделей, запуск обучения, генерация, forward pass |
+| `/api/v1/training` | Фоновые задачи обучения, статус и результат |
+| `/api/v1/inference` | Forward pass, text sampling |
+| `/api/v1/diagnostics` | Метрики мозга, текущее состояние активации |
+| `/api/v1/evolution` | Запуск генетической оптимизации генома |
+| `/api/v1/twins` | CRUD двойников; learn, mastery, cognitive-state, interaction, predict |
+| `/api/v1/auto-evolution` | Автоматическая оптимизация без ручного задания fitness |
 
 ---
 
-## 🧪 Тестирование
+## Формальная верификация (Lean4)
+
+**Инструментарий**: Lean 4 v4.28.0 + Mathlib v4.28.0
+
+| Файл | Содержание |
+|------|-----------|
+| `DeltaE.lean` | Delta_E <= 0 при обновлении одного нейрона |
+| `Convergence.lean` | Конечная сходимость: <= 2^n шагов (принцип Дирихле) |
+| `Hopfield.lean` | Базовые определения: sigma, spin, updateCoord, globalEnergy |
+| `SumLemmas.lean` | Вспомогательные леммы для скалярных произведений |
+| `Glue.lean` | globalEnergy_nonincreasing_updateCoord |
+
+**21 теорема, 0 sorry, 0 ошибок, 0 axioms.**
 
 ```bash
-# Запуск всех тестов
-pytest
-
-# С покрытием
-pytest --cov=magicbrain --cov-report=html
-
-# Specific test
-pytest tests/platform/test_orchestrator.py -v
+cd formal && lake build
 ```
-
-**Текущее покрытие**: 57 тестов, >90% coverage, 100% pass rate
 
 ---
 
-## 📊 Статистика проекта
+## Тестирование
+
+```bash
+pytest                                    # все тесты
+pytest --cov=magicbrain --cov-report=html # с покрытием
+pytest tests/neurogenesis/ -v             # NeuroGenesis (93 теста)
+pytest tests/platform/ -v                 # Platform
+pytest tests/integration/ -v              # Integration
+```
+
+| Категория | Файлов |
+|-----------|--------|
+| Core SNN | 6 |
+| NeuroGenesis | 8 (93 теста) |
+| Platform | 5 |
+| Hybrid | 2 |
+| Evolution, Diagnostics, STDP | 3 |
+| Training | 3 |
+| Integration | 3 |
+
+**34 тестовых файла, 237+ passed, 90%+ coverage.**
+
+---
+
+## Геномное кодирование
+
+Base-4 строка 24+ символов. Каждая позиция детерминированно задаёт гиперпараметр:
+
+| Позиция | Параметр | Диапазон |
+|---------|----------|---------|
+| 0-1 | N (нейронов) | 256-1216 |
+| 2 | K (связность) | 8-20 |
+| 4 | lr | 5e-4 - 2e-3 |
+| 5 | k_active | 4-7% от N |
+| 15 | p_inhib | 10-25% |
+| 16 | dopamine_gain | 0.8-2.0 |
+| 20 | prune_every | 800-1400 шагов |
+
+Геном по умолчанию: `"30121033102301230112332100123"`
+
+---
+
+## Статистика
 
 | Метрика | Значение |
 |---------|----------|
-| **Версия** | 0.6.0 (Hybrid Edition) |
-| **Файлов** | 46 |
-| **Строк кода** | ~9,000 |
-| **Тестов** | 57 (100% passed) |
-| **Model types** | 5 базовых |
-| **Hybrid combinations** | Unlimited |
-| **Фаз завершено** | 3/3 (100%) |
-| **Python** | 3.9+ |
+| Версия | 0.7.1 (Lean4 Formal Verification Edition) |
+| Python | 3.9, 3.10, 3.11, 3.12 |
+| Лицензия | Apache 2.0 |
+| Python-модулей | 88 (magicbrain/) + 16 (api/) |
+| Тестовых файлов | 34 |
+| Passed тестов | 237+ |
+| Покрытие | 90%+ |
+| Lean4 теорем | 21 (0 sorry, 0 errors) |
+| Типов моделей | 5 |
+| Стратегий оркестрации | 7 |
+| API эндпоинтов | 30+ |
+| MAGIC Level | 2 (MetaBrain) |
 
 ---
 
-## 🤝 Contributing
+## Roadmap
 
-Мы приветствуем контрибуции! Пожалуйста:
+### v0.7.2
+- [ ] Lean4 верификация STDP-правил обучения
+- [ ] Покрытие тестами до 95%+
 
-1. Fork репозиторий
-2. Создайте feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit изменения (`git commit -m 'Add amazing feature'`)
-4. Push в branch (`git push origin feature/amazing-feature`)
-5. Откройте Pull Request
-
-### Development Setup
-
-```bash
-git clone https://github.com/AndrewHakmi/MagicBrain.git
-cd MagicBrain
-pip install -e ".[dev]"
-pytest
-```
-
-### Code Style
-
-- Используем Ruff для форматирования и линтинга
-- Type hints обязательны
-- Docstrings в Google style
-- 100% test coverage для новых features
-
----
-
-## 🌟 Key Innovations
-
-### 1. Universal Model Interface
-Первая платформа с единым интерфейсом для SNN, DNN, Transformers, CNN, RNN.
-
-### 2. Automatic Type Conversion
-Прозрачная конвертация между spike trains, dense vectors, embeddings.
-
-### 3. Hybrid Architecture System
-Compositional API для построения arbitrary гибридных архитектур.
-
-### 4. Spiking Attention
-Attention mechanism в spike domain - foundation для neuromorphic transformers.
-
-### 5. Multi-Model Orchestration
-Seamless integration разных model types в единые pipelines.
-
----
-
-## 🔮 Roadmap
-
-### v0.7.0 (Q2 2026)
-- [ ] Advanced orchestration (Mixture of Experts)
-- [ ] Dynamic routing между моделями
-- [ ] Feedback loops в гибридных архитектурах
-- [ ] Performance optimizations
-
-### v0.8.0 (Q3 2026)
-- [ ] Joint training для гибридных систем
-- [ ] Knowledge distillation
-- [ ] Meta-learning capabilities
-- [ ] Extended model zoo
+### v0.8.0 (Q2 2026)
+- [ ] Joint training гибридных архитектур (SNN <-> DNN градиенты)
+- [ ] Knowledge distillation из больших моделей в SNN
+- [ ] Расширенный Model Zoo с предобученными геномами
 
 ### v1.0.0 (Q4 2026)
-- [ ] Model serving infrastructure
-- [ ] Distributed inference
-- [ ] Monitoring dashboard
-- [ ] Production deployment tools
+- [ ] Production inference server
+- [ ] Distributed training
+- [ ] Stable public API с гарантиями совместимости
 
 ---
 
-## 📄 License
+## Место в MAGIC Ecosystem
 
-Этот проект является частью экосистемы [StudyNinja-Eco](https://github.com/XTeam-Pro/StudyNinja-Eco).
-
----
-
-## 🙏 Acknowledgments
-
-**Powered by**:
-- PyTorch ecosystem
-- Hugging Face Transformers
-- NumPy & JAX
-- Python 3.12
-
-**Inspired by**:
-- Biological neural networks
-- Neuromorphic computing
-- Multi-modal AI research
-- Compositional architectures
+```
+Level 4 (MetaKnowledge): KnowledgeBaseAI  <- синхронизация освоения тем
+Level 3 (MetaAgent):     xteam-agents     <- когнитивные модели студентов
+Level 2 (MetaBrain):     MagicBrain       <- живая AGI-память (этот проект)
+Level 1 (MetaBalansis):  Balansis         <- ACT-компенсированная арифметика
+Applied:                 StudyNinja-API   <- circuit breaker -> /health
+```
 
 ---
 
-## 📧 Contact
+## Лицензия
 
-- **Repository**: [github.com/AndrewHakmi/MagicBrain](https://github.com/AndrewHakmi/MagicBrain)
-- **Issues**: [GitHub Issues](https://github.com/AndrewHakmi/MagicBrain/issues)
-- **Ecosystem**: [StudyNinja-Eco](https://github.com/XTeam-Pro/StudyNinja-Eco)
+**Apache License 2.0** — см. [LICENSE](./LICENSE).
+
+Коммерческое использование: [COMMERCIAL_LICENSE.md](./COMMERCIAL_LICENSE.md).
 
 ---
 
-<div align="center">
+## Contributing
 
-**🧠 MagicBrain Platform - From single models to model ecosystems! 🌐**
+1. Fork репозиторий
+2. Создайте feature branch
+3. Добавьте тесты (coverage >= 90% для новых модулей)
+4. Откройте Pull Request
 
-Made with ❤️ for the AI & Neuromorphic Computing community
+Code style: Ruff, type hints обязательны, docstrings в Google style.
 
-</div>
+---
+
+**MagicBrain — биологически правдоподобная память для AGI-систем**
+
+Часть [StudyNinja-Eco](https://github.com/XTeam-Pro/StudyNinja-Eco) | MAGIC Level 2: MetaBrain

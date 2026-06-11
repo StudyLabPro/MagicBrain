@@ -1,3 +1,29 @@
+"""Core spiking neural network for next-character prediction.
+
+Implements a biologically-inspired SNN with the following key features:
+
+- **Binary spikes** with sparse top-k winner-take-all activation
+- **Dual weight system**: slow (long-term consolidation) and fast (adaptive plasticity)
+- **Dual trace system**: fast and slow eligibility traces for temporal credit assignment
+- **Axonal delays** (1-5 timesteps) modeled via delay buffers
+- **Dopamine-modulated Hebbian learning**: dW = lr * dopamine * advantage * pre * post
+- **Homeostatic threshold adaptation** to maintain target firing rate
+- **Structural plasticity**: periodic pruning of weak synapses and rewiring
+- **Excitatory/inhibitory balance**: weight sign constraints enforced after every update
+
+The network architecture is fully determined by a compact genome string
+(see :mod:`magicbrain.genome`).  The forward pass propagates binary spikes
+through a spatially-embedded graph with distance-dependent delays.  Learning
+combines gradient descent on the readout layer with reward-modulated Hebbian
+updates on recurrent connections.
+
+References:
+    - Maass, W. (1997). Networks of spiking neurons: the third generation
+      of neural network models. Neural Networks, 10(9), 1659-1671.
+    - Izhikevich, E.M. (2007). Solving the distal reward problem through
+      linkage of STDP and dopamine signaling. Cerebral Cortex, 17(10).
+"""
+
 from __future__ import annotations
 import numpy as np
 from .genome import decode_genome
@@ -5,8 +31,44 @@ from .graph import build_graph
 from .utils import softmax, sparsify_topm, sigmoid, clamp
 
 class TextBrain:
+    """Spiking neural network for character-level language modeling.
+
+    A sparse, biologically-plausible SNN where neurons communicate via binary
+    spikes propagated through a 3D spatial graph with axonal delays.  The
+    network learns via dopamine-modulated Hebbian plasticity on recurrent
+    connections and gradient descent on a linear readout layer.
+
+    The architecture (neuron count, connectivity, learning rates, etc.) is
+    entirely specified by a base-4 genome string decoded via
+    :func:`~magicbrain.genome.decode_genome`.
+
+    Attributes:
+        N: Number of neurons.
+        K: Local connectivity (edges per neuron).
+        vocab_size: Output vocabulary size.
+        a: Binary spike vector (N,) -- current activation.
+        w_slow: Long-term synaptic weights (E,) consolidated from w_fast.
+        w_fast: Short-term adaptive weights (E,) updated by Hebbian rule.
+        theta: Homeostatic firing thresholds (N,).
+        trace_fast: Fast eligibility trace (N,), decays with trace_fast_decay.
+        trace_slow: Slow eligibility trace (N,), decays with trace_slow_decay.
+        R: Readout weight matrix (N, vocab_size).
+        b: Readout bias vector (vocab_size,).
+        dopamine: Current dopamine level in [0, 1], modulates learning.
+        step: Training step counter.
+    """
+
     def __init__(self, genome: str, vocab_size: int, seed_override: int | None = None,
                  use_act: bool = False):
+        """Initialize the SNN from a genome string.
+
+        Args:
+            genome: Base-4 encoded architecture string (min 24 chars).
+            vocab_size: Number of output tokens (characters).
+            seed_override: If set, overrides the genome-encoded random seed.
+            use_act: If True, use ACT-compensated arithmetic from Balansis
+                for numerically stable weight updates and softmax.
+        """
         self.genome_str = genome
         self.p = decode_genome(genome)
 
@@ -77,16 +139,24 @@ class TextBrain:
 
         self.step = 0
 
-    def _enforce_ei_signs(self):
+    def _enforce_ei_signs(self) -> None:
+        """Enforce excitatory/inhibitory sign constraints on synaptic weights.
+
+        Inhibitory neurons (flagged by ``is_inhib``) must have non-positive
+        outgoing weights.  This is applied to both w_slow and w_fast after
+        every weight update to maintain Dale's principle.
+        """
         inhib_src = self.is_inhib[self.src]
         if np.any(inhib_src):
             self.w_slow[inhib_src] = -np.abs(self.w_slow[inhib_src])
             self.w_fast[inhib_src] = -np.abs(self.w_fast[inhib_src])
 
     def _effective_w(self) -> np.ndarray:
+        """Return the effective synaptic weight vector: w_slow + w_fast."""
         return (self.w_slow + self.w_fast).astype(np.float32)
 
-    def reset_state(self):
+    def reset_state(self) -> None:
+        """Reset all dynamic state (spikes, traces, delay buffers) to zero."""
         self.a.fill(0)
         self.trace_fast.fill(0)
         self.trace_slow.fill(0)
@@ -94,6 +164,20 @@ class TextBrain:
             b.fill(0)
 
     def compute_state(self) -> np.ndarray:
+        """Compute the composite neural state vector for readout.
+
+        Combines the current binary spike vector with fast and slow
+        eligibility traces::
+
+            state = a + alpha * clip(trace_fast) + beta * clip(trace_slow)
+
+        The result is L1-normalized to ``k_active`` to maintain a stable
+        input magnitude to the readout layer regardless of activation
+        sparsity.
+
+        Returns:
+            State vector of shape (N,), non-negative, L1-sum ~ k_active.
+        """
         tf = np.clip(self.trace_fast, 0.0, self.fast_clip)
         ts = np.clip(self.trace_slow, 0.0, self.slow_clip)
 
@@ -107,7 +191,22 @@ class TextBrain:
             state *= (self.state_sum_target / s)
         return state
 
-    def _update_modulators(self, loss: float):
+    def _update_modulators(self, loss: float) -> float:
+        """Update neuromodulatory signals based on prediction error.
+
+        Computes the advantage signal (loss_ema - loss) and maps it through
+        a sigmoid to produce a dopamine level in [0, 1].  Positive advantage
+        (loss decreased) yields high dopamine (reward), strengthening active
+        synapses.  The loss EMA is updated with a slow exponential average
+        (tau = 0.005).
+
+        Args:
+            loss: Current cross-entropy loss.
+
+        Returns:
+            The raw advantage signal (loss_ema - loss), used for scaling
+            the Hebbian weight update.
+        """
         adv = float(self.loss_ema - loss)
         self.loss_ema = 0.995 * self.loss_ema + 0.005 * loss
 
@@ -118,6 +217,29 @@ class TextBrain:
         return adv
 
     def forward(self, token_id: int) -> np.ndarray:
+        """Perform one forward pass: input token -> output probability distribution.
+
+        The forward pass proceeds in five stages:
+
+        1. **Delay buffer shift**: Advance all axonal delay buffers by one
+           timestep and apply buffer decay.
+        2. **Input injection**: Set sensory neurons for ``token_id`` to 1.
+           Select remaining active neurons via top-k on the net input
+           (delayed signal minus threshold plus noise).
+        3. **Trace update**: Update fast and slow eligibility traces with
+           exponential decay plus current spikes.
+        4. **Spike propagation**: For each delay group d in [1,5], scatter
+           spike contributions (a[src] * w_eff * recur_scale) into
+           buffers[d] at destination neurons.
+        5. **Readout**: Compute state vector, project through linear readout
+           (R, b), apply softmax.
+
+        Args:
+            token_id: Input token index in [0, vocab_size).
+
+        Returns:
+            Probability distribution over vocabulary, shape (vocab_size,).
+        """
         self.step += 1
 
         delayed_now = self.buffers[1].copy()
@@ -176,17 +298,32 @@ class TextBrain:
             return self._act.softmax(logits)
         return softmax(logits)
 
-    def _consolidate(self):
+    def _consolidate(self) -> None:
+        """Consolidate fast weights into slow weights (memory consolidation).
+
+        Implements a slow exponential moving average:
+        ``w_slow <- (1 - eps) * w_slow + eps * w_fast``,
+        analogous to synaptic tagging and capture in neuroscience.
+        """
         eps = float(self.p["cons_eps"])
         if eps <= 0:
             return
         self.w_slow = ((1.0 - eps) * self.w_slow + eps * self.w_fast).astype(np.float32)
 
-    def _decay_fast(self):
+    def _decay_fast(self) -> None:
+        """Exponentially decay fast weights toward zero."""
         d = float(self.p["w_fast_decay"])
         self.w_fast *= d
 
-    def _prune_and_rewire(self):
+    def _prune_and_rewire(self) -> None:
+        """Structural plasticity: prune weak synapses and optionally rewire.
+
+        Removes the weakest ``prune_frac`` fraction of edges by absolute
+        effective weight.  A ``rewire_frac`` subset of pruned edges is
+        reassigned to random source/destination pairs with distance-based
+        delays and small random initial weights.  Remaining pruned edges
+        are zeroed out.  Delay index is rebuilt after rewiring.
+        """
         prune_frac = float(self.p["prune_frac"])
         if prune_frac <= 0:
             return
@@ -223,7 +360,12 @@ class TextBrain:
             idx_by_delay.append(np.where(self.delay == d)[0].astype(np.int32))
         self.idx_by_delay = idx_by_delay
 
-    def damage_edges(self, frac: float = 0.2):
+    def damage_edges(self, frac: float = 0.2) -> None:
+        """Zero out a random fraction of synaptic weights (lesion experiment).
+
+        Args:
+            frac: Fraction of edges to damage, in [0, 1].
+        """
         frac = clamp(float(frac), 0.0, 1.0)
         E = int(self.src.shape[0])
         n = int(E * frac)
@@ -234,6 +376,32 @@ class TextBrain:
         self.w_fast[idx] = 0.0
 
     def learn(self, target_id: int, probs: np.ndarray) -> float:
+        """Perform one learning step given the target token and predicted probabilities.
+
+        The learning algorithm combines two mechanisms:
+
+        1. **Readout gradient descent**: Standard cross-entropy gradient on the
+           linear readout layer (R, b), with per-element clipping.
+
+        2. **Dopamine-modulated Hebbian update** on recurrent weights::
+
+               dW = lr * dopamine * advantage * pre * post
+
+           where ``pre`` = presynaptic trace, ``post`` = postsynaptic spike,
+           ``dopamine`` = sigmoid(gain * advantage + bias), and
+           ``advantage`` = loss_ema - loss.
+
+        After weight updates: E/I sign constraints are enforced, fast weights
+        are decayed and consolidated into slow weights, homeostatic thresholds
+        are adapted, and periodic pruning/rewiring is triggered.
+
+        Args:
+            target_id: Correct next-token index.
+            probs: Predicted probability distribution from :meth:`forward`.
+
+        Returns:
+            Cross-entropy loss: -log(probs[target_id]).
+        """
         p = float(probs[target_id])
         loss = float(-np.log(p + 1e-9))
 
@@ -288,10 +456,13 @@ class TextBrain:
         return loss
 
     def avg_theta(self) -> float:
+        """Return the mean homeostatic threshold across all neurons."""
         return float(np.mean(self.theta))
 
     def mean_abs_w(self) -> float:
+        """Return the mean absolute effective synaptic weight."""
         return float(np.mean(np.abs(self._effective_w())))
 
     def firing_rate(self) -> float:
+        """Return the current fraction of active (spiking) neurons."""
         return float(np.mean(self.a))

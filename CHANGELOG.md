@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.7.1] — 2026-02-18 — Lean4 Formal Verification
+
+### Added
+
+#### Lean4 Formal Proofs (`formal/MagicBrainFormal/`)
+Energy-based convergence theorem for SNN Hopfield dynamics — **21 theorems, 0 sorry, 0 errors**.
+
+- **`DeltaE.lean`** — proves that Δ*E* ≤ 0 for every synchronous SNN weight update:
+  - `dotProduct_comm`, `dotProduct_add` — vector arithmetic lemmas
+  - `quadraticForm_expansion` — W symmetry → Q(v) = vᵀWv
+  - `globalEnergyVec_eq_B` — global energy via bias term
+  - `deltaE_le_zero` — **main theorem**: energy is non-increasing (convergence guarantee)
+  - `network_converges` — corollary: network reaches attractor state
+  - `convergence_bound` — energy bounded below by eigenvalues
+- All `simpa` replaced with `simp` or `rw` (linter clean, 0 warnings)
+
+#### CI/CD (StudyNinja-Eco)
+- `qa-gates.yml` lean-formal matrix job: builds MagicBrain and Balansis proofs in parallel
+
+### Changed
+- Remote URL migrated to `git@github.com:XTeam-Pro/MagicBrain.git`
+- `development` branch created from `main`, set as tracking branch
+
+---
+
 ## [0.7.0] - 2026-02-13 - NEUROGENESIS EDITION
 
 **MAJOR RELEASE**: Neurogenomic memory system — data encoded as compact generative genomes that reproduce information through dynamic neural structure activation.
