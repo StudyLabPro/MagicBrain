@@ -35,3 +35,8 @@ env/
 # Project specific
 *.npz
 model.npz
+
+# Lean4
+.lake/
+lake-packages/
+lake-manifest.json
