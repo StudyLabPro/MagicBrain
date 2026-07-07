@@ -97,6 +97,10 @@ Documentation = "https://github.com/studyninja/magicbrain/tree/main/docs"
 [project.scripts]
 magicbrain = "magicbrain.cli:main"
 
+[tool.setuptools.packages.find]
+include = ["magicbrain*"]
+exclude = ["api*", "formal*", "tests*"]
+
 [tool.pytest.ini_options]
 minversion = "6.0"
 addopts = "-ra -q"

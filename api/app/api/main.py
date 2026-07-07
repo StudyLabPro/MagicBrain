@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from ..core.config import settings
-from .routes import models, training, inference, diagnostics, evolution, twins, auto_evolution
+from .routes import models, training, inference, diagnostics, evolution, twins, auto_evolution, runtime
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -53,6 +53,11 @@ app.include_router(
     inference.router,
     prefix=f"{settings.API_V1_STR}/inference",
     tags=["inference"],
+)
+app.include_router(
+    runtime.router,
+    prefix=f"{settings.API_V1_STR}/runtime",
+    tags=["runtime"],
 )
 app.include_router(
     diagnostics.router,

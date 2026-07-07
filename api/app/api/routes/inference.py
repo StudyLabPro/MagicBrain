@@ -3,10 +3,9 @@ Inference endpoints.
 """
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
-from typing import List, Optional
-from pathlib import Path
+from typing import Any, List, Optional
 
-from ...core.config import settings
+from ...core.runtime import RuntimeModelNotFoundError, get_runtime_service
 
 router = APIRouter()
 
@@ -26,12 +25,14 @@ class SampleResponse(BaseModel):
     seed_text: str
     generated_text: str
     n_tokens: int
+    runtime: dict[str, Any] = {}
 
 
 class PredictRequest(BaseModel):
     """Request to predict next token."""
     model_id: str
     context: str
+    top_k: int = Field(default=10, ge=1, le=100)
 
 
 class PredictResponse(BaseModel):
@@ -39,106 +40,58 @@ class PredictResponse(BaseModel):
     model_id: str
     context: str
     predictions: List[dict]  # [{token, probability}]
+    runtime: dict[str, Any] = {}
 
 
 @router.post("/sample", response_model=SampleResponse)
 async def sample_text(request: SampleRequest):
     """
-    Generate text from model.
-
-    Args:
-        request: Sampling parameters
-
-    Returns:
-        Generated text
+    Generate text from model through the platform runtime.
     """
-    from magicbrain.io import load_model
-    from magicbrain.sampling import sample
-
-    # Load model
-    model_path = Path(settings.MODEL_STORAGE_PATH) / f"{request.model_id}.npz"
-    if not model_path.exists():
+    runtime = get_runtime_service()
+    try:
+        result = runtime.sample(
+            model_id=request.model_id,
+            seed_text=request.seed_text,
+            n_tokens=request.n_tokens,
+            temperature=request.temperature,
+            top_k=request.top_k,
+        )
+    except RuntimeModelNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Model {request.model_id} not found"
-        )
+            detail=str(exc),
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
 
-    brain, stoi, itos, _ = load_model(str(model_path))
-
-    # Generate
-    generated = sample(
-        brain,
-        stoi,
-        itos,
-        seed=request.seed_text,
-        n=request.n_tokens,
-        temperature=request.temperature,
-        top_k=request.top_k
-    )
-
-    return SampleResponse(
-        model_id=request.model_id,
-        seed_text=request.seed_text,
-        generated_text=generated,
-        n_tokens=len(generated.split())
-    )
+    return SampleResponse(**result)
 
 
 @router.post("/predict", response_model=PredictResponse)
 async def predict_next(request: PredictRequest):
     """
-    Predict next token probabilities.
-
-    Args:
-        request: Prediction request
-
-    Returns:
-        Top predictions with probabilities
+    Predict next token probabilities through the platform runtime.
     """
-    from magicbrain.io import load_model
-    import numpy as np
-
-    # Load model
-    model_path = Path(settings.MODEL_STORAGE_PATH) / f"{request.model_id}.npz"
-    if not model_path.exists():
+    runtime = get_runtime_service()
+    try:
+        result = runtime.predict(
+            model_id=request.model_id,
+            context=request.context,
+            top_k=request.top_k,
+        )
+    except RuntimeModelNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Model {request.model_id} not found"
-        )
-
-    brain, stoi, itos, _ = load_model(str(model_path))
-
-    # Get last character
-    if not request.context:
+            detail=str(exc),
+        ) from exc
+    except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Context cannot be empty"
-        )
+            detail=str(exc),
+        ) from exc
 
-    last_char = request.context[-1]
-    if last_char not in stoi:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Character '{last_char}' not in vocabulary"
-        )
-
-    # Forward pass
-    token_id = stoi[last_char]
-    probs = brain.forward(token_id)
-
-    # Get top 10 predictions
-    top_indices = np.argsort(probs)[-10:][::-1]
-
-    predictions = [
-        {
-            "token": itos[int(idx)],
-            "probability": float(probs[idx])
-        }
-        for idx in top_indices
-    ]
-
-    return PredictResponse(
-        model_id=request.model_id,
-        context=request.context,
-        predictions=predictions
-    )
+    return PredictResponse(**result)

@@ -40,3 +40,5 @@ model.npz
 .lake/
 lake-packages/
 lake-manifest.json
+
+frontend/node_modules/

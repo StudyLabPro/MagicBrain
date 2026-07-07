@@ -8,8 +8,20 @@ import os
 from pathlib import Path
 
 from ...core.config import settings
+from ...core.runtime import RuntimeModelNotFoundError, get_runtime_service
 
 router = APIRouter()
+
+
+def get_runtime_model_state(model_id: str) -> dict:
+    for item in get_runtime_service().list_storage_models():
+        if item["model_id"] == model_id:
+            return {
+                "loaded": item["loaded"],
+                "registered": item["registered"],
+                "auto_load": item["auto_load"],
+            }
+    return {"loaded": False, "registered": False, "auto_load": False}
 
 
 class ModelInfo(BaseModel):
@@ -20,6 +32,9 @@ class ModelInfo(BaseModel):
     created_at: str
     size_bytes: int
     metadata: dict = {}
+    loaded: bool = False
+    registered: bool = False
+    auto_load: bool = False
 
 
 class CreateModelRequest(BaseModel):
@@ -35,6 +50,10 @@ class ModelListResponse(BaseModel):
     total: int
 
 
+class ModelRuntimeAction(BaseModel):
+    auto_load: bool = False
+
+
 @router.get("/", response_model=ModelListResponse)
 async def list_models(load_metadata: bool = False):
     """
@@ -48,10 +67,15 @@ async def list_models(load_metadata: bool = False):
     models_path = Path(settings.MODEL_STORAGE_PATH)
     models_path.mkdir(parents=True, exist_ok=True)
 
+    runtime_states = {
+        item["model_id"]: item for item in get_runtime_service().list_storage_models()
+    }
+
     models = []
     for model_file in models_path.glob("*.npz"):
         # Get file info
         stat = model_file.stat()
+        runtime_state = runtime_states.get(model_file.stem, {})
 
         if load_metadata:
             # Load full metadata (slower but complete)
@@ -70,7 +94,10 @@ async def list_models(load_metadata: bool = False):
                         "N": metadata.get("N", 0),
                         "K": metadata.get("K", 0),
                         "timestamp": metadata.get("timestamp", 0),
-                    }
+                    },
+                    loaded=runtime_state.get("loaded", False),
+                    registered=runtime_state.get("registered", False),
+                    auto_load=runtime_state.get("auto_load", False),
                 ))
             except Exception:
                 # If loading fails, use minimal info
@@ -80,7 +107,10 @@ async def list_models(load_metadata: bool = False):
                     vocab_size=0,
                     created_at=str(stat.st_ctime),
                     size_bytes=stat.st_size,
-                    metadata={"error": "failed_to_load"}
+                    metadata={"error": "failed_to_load"},
+                    loaded=runtime_state.get("loaded", False),
+                    registered=runtime_state.get("registered", False),
+                    auto_load=runtime_state.get("auto_load", False),
                 ))
         else:
             # Fast listing without loading models
@@ -90,7 +120,10 @@ async def list_models(load_metadata: bool = False):
                 vocab_size=0,
                 created_at=str(stat.st_ctime),
                 size_bytes=stat.st_size,
-                metadata={}
+                metadata={},
+                loaded=runtime_state.get("loaded", False),
+                registered=runtime_state.get("registered", False),
+                auto_load=runtime_state.get("auto_load", False),
             ))
 
     return ModelListResponse(
@@ -138,7 +171,8 @@ async def get_model(model_id: str):
                 "N": metadata.get("N", 0),
                 "K": metadata.get("K", 0),
                 "timestamp": metadata.get("timestamp", 0),
-            }
+            },
+            **get_runtime_model_state(model_id),
         )
     except Exception as e:
         raise HTTPException(
@@ -192,8 +226,55 @@ async def create_model(request: CreateModelRequest):
         vocab_size=request.vocab_size,
         created_at=str(stat.st_ctime),
         size_bytes=stat.st_size,
-        metadata={"steps": 0, "untrained": True}
+        metadata={"steps": 0, "untrained": True},
+        loaded=False,
+        registered=False,
+        auto_load=False,
     )
+
+
+@router.post("/{model_id}/register")
+async def register_model_runtime(model_id: str, request: ModelRuntimeAction):
+    runtime = get_runtime_service()
+    try:
+        return runtime.register_model(model_id, auto_load=request.auto_load)
+    except RuntimeModelNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+
+@router.delete("/{model_id}/register", status_code=status.HTTP_204_NO_CONTENT)
+async def unregister_model_runtime(model_id: str):
+    get_runtime_service().unload(model_id, unregister=True)
+    return None
+
+
+@router.post("/{model_id}/load")
+async def load_model_runtime(model_id: str, force_reload: bool = False):
+    runtime = get_runtime_service()
+    try:
+        model = runtime.load(model_id, force_reload=force_reload)
+    except RuntimeModelNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    return {
+        "model_id": model.model_id,
+        "loaded": True,
+        "registered": True,
+        "auto_load": True,
+        "metadata": model.metadata,
+        "loaded_at": model.loaded_at,
+    }
+
+
+@router.delete("/{model_id}/unload", status_code=status.HTTP_204_NO_CONTENT)
+async def unload_model_runtime(model_id: str, unregister: bool = False):
+    get_runtime_service().unload(model_id, unregister=unregister)
+    return None
 
 
 @router.delete("/{model_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -213,5 +294,6 @@ async def delete_model(model_id: str):
         )
 
     model_path.unlink()
+    get_runtime_service().unload(model_id, unregister=True)
 
     return None
