@@ -1,0 +1,49 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: magicbrain-backend:local
+    container_name: magicbrain-backend
+    environment:
+      PROJECT_NAME: MagicBrainAPI
+      VERSION: 0.1.0
+      HOST: 0.0.0.0
+      PORT: 8000
+      MODEL_STORAGE_PATH: /app/models
+      BACKEND_CORS_ORIGINS: '["http://localhost:3000","http://localhost:8080","http://frontend"]'
+    volumes:
+      - magicbrain-models:/app/models
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ""
+    image: magicbrain-frontend:local
+    container_name: magicbrain-frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "3000:80"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  magicbrain-models:

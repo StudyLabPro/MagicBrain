@@ -52,7 +52,7 @@ type SampleResponse = {
   }
 }
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV ? 'http://localhost:8000' : '')
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
@@ -79,6 +79,11 @@ function formatBytes(bytes: number) {
   return `${(bytes / 1024 ** index).toFixed(index === 0 ? 0 : 1)} ${units[index]}`
 }
 
+function formatDate(value: string) {
+  if (!value) return '—'
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
+}
+
 function pickDefaultModel(models: ModelInfo[]) {
   return models.find((model) => model.loaded)?.model_id ?? models[0]?.model_id ?? ''
 }
@@ -89,17 +94,30 @@ export function App() {
   const [selectedModel, setSelectedModel] = useState('')
   const [context, setContext] = useState('1')
   const [seedText, setSeedText] = useState('1')
+  const [topK, setTopK] = useState(8)
+  const [temperature, setTemperature] = useState(0.75)
   const [sampleTokens, setSampleTokens] = useState(64)
   const [predictResult, setPredictResult] = useState<PredictResponse | null>(null)
   const [sampleResult, setSampleResult] = useState<SampleResponse | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
+  const selectedModelInfo = useMemo(
+    () => models.find((model) => model.model_id === selectedModel) ?? null,
+    [models, selectedModel],
+  )
+
   const graphEdges = useMemo(() => {
     if (!stats) return []
     return Object.entries(stats.orchestrator.graph).flatMap(([source, node]) =>
       node.outputs.length ? node.outputs.map((target) => `${source} → ${target}`) : [`${source} · isolated`],
     )
+  }, [stats])
+
+  const runtimeHealth = useMemo(() => {
+    if (!stats) return 'connecting'
+    if (stats.loaded_models.length === 0) return 'idle'
+    return 'ready'
   }, [stats])
 
   async function refresh() {
@@ -157,7 +175,7 @@ export function App() {
     await runAction('predict', async () => {
       const result = await request<PredictResponse>('/api/v1/inference/predict', {
         method: 'POST',
-        body: JSON.stringify({ model_id: selectedModel, context, top_k: 8 }),
+        body: JSON.stringify({ model_id: selectedModel, context, top_k: topK }),
       })
       setPredictResult(result)
       await refresh()
@@ -173,7 +191,7 @@ export function App() {
           model_id: selectedModel,
           seed_text: seedText,
           n_tokens: sampleTokens,
-          temperature: 0.75,
+          temperature,
         }),
       })
       setSampleResult(result)
@@ -205,6 +223,24 @@ export function App() {
         <Metric title="Runtime graph" value={`${Object.keys(stats?.orchestrator.graph ?? {}).length} nodes`} tone="blue" />
       </section>
 
+      <section className="statusStrip panel">
+        <div>
+          <span className={`statusDot ${runtimeHealth}`} />
+          <strong>{runtimeHealth}</strong>
+          <small>{busy ? `current task: ${busy}` : 'runtime heartbeat stable'}</small>
+        </div>
+        <div>
+          <span>Active model</span>
+          <strong>{selectedModelInfo?.model_id ?? '—'}</strong>
+          <small>{selectedModelInfo ? `${formatBytes(selectedModelInfo.size_bytes)} · ${selectedModelInfo.genome}` : 'select a model to inspect'}</small>
+        </div>
+        <div>
+          <span>Executions</span>
+          <strong>{Object.values(stats?.orchestrator.graph ?? {}).reduce((sum, node) => sum + node.execution_count, 0)}</strong>
+          <small>graph execution count</small>
+        </div>
+      </section>
+
       <section className="grid">
         <div className="panel modelsPanel">
           <div className="sectionHeader">
@@ -225,9 +261,12 @@ export function App() {
                 className={`modelCard ${selectedModel === model.model_id ? 'selected' : ''}`}
                 onClick={() => setSelectedModel(model.model_id)}
               >
-                <div>
-                  <h3>{model.model_id}</h3>
-                  <p>{formatBytes(model.size_bytes)} · vocab {model.vocab_size || '—'}</p>
+                <div className="modelTitleRow">
+                  <div>
+                    <h3>{model.model_id}</h3>
+                    <p>{formatBytes(model.size_bytes)} · vocab {model.vocab_size || '—'}</p>
+                  </div>
+                  <span className="modelGenome">{model.genome}</span>
                 </div>
                 <div className="badges">
                   <span className={model.loaded ? 'badge hot' : 'badge'}>{model.loaded ? 'loaded' : 'cold'}</span>
@@ -260,27 +299,46 @@ export function App() {
             </select>
           </div>
 
-          <label>
-            Context for prediction
-            <input value={context} onChange={(event) => setContext(event.target.value)} placeholder="Last known token" />
-          </label>
+          <div className="splitInputs">
+            <label>
+              Context for prediction
+              <input value={context} onChange={(event) => setContext(event.target.value)} placeholder="Last known token" />
+            </label>
+            <label>
+              Top K
+              <input
+                type="number"
+                min="1"
+                max="32"
+                value={topK}
+                onChange={(event) => setTopK(Number(event.target.value))}
+              />
+            </label>
+          </div>
           <button className="primary" onClick={predict} disabled={!selectedModel || !!busy}>
             Predict next token
           </button>
 
           {predictResult && (
-            <div className="predictionBars">
-              {predictResult.predictions.map((item) => (
-                <div className="bar" key={`${item.token}-${item.probability}`}>
-                  <span>{item.token}</span>
-                  <div><i style={{ width: `${Math.max(2, item.probability * 100)}%` }} /></div>
-                  <strong>{(item.probability * 100).toFixed(1)}%</strong>
-                </div>
-              ))}
+            <div className="resultCard">
+              <ResultMeta
+                title="Prediction result"
+                modelId={predictResult.model_id}
+                runtime={predictResult.runtime}
+              />
+              <div className="predictionBars">
+                {predictResult.predictions.map((item) => (
+                  <div className="bar" key={`${item.token}-${item.probability}`}>
+                    <span>{item.token}</span>
+                    <div><i style={{ width: `${Math.max(2, item.probability * 100)}%` }} /></div>
+                    <strong>{(item.probability * 100).toFixed(1)}%</strong>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
-          <div className="splitInputs">
+          <div className="splitInputs threeColumns">
             <label>
               Seed
               <input value={seedText} onChange={(event) => setSeedText(event.target.value)} />
@@ -295,12 +353,32 @@ export function App() {
                 onChange={(event) => setSampleTokens(Number(event.target.value))}
               />
             </label>
+            <label>
+              Temp
+              <input
+                type="number"
+                min="0.1"
+                max="2"
+                step="0.05"
+                value={temperature}
+                onChange={(event) => setTemperature(Number(event.target.value))}
+              />
+            </label>
           </div>
           <button className="primary secondary" onClick={sample} disabled={!selectedModel || !!busy}>
             Generate sample
           </button>
 
-          {sampleResult && <pre className="sampleBox">{sampleResult.generated_text}</pre>}
+          {sampleResult && (
+            <div className="resultCard">
+              <ResultMeta
+                title="Generated sample"
+                modelId={sampleResult.model_id}
+                runtime={sampleResult.runtime}
+              />
+              <pre className="sampleBox">{sampleResult.generated_text}</pre>
+            </div>
+          )}
         </div>
 
         <div className="panel runtimePanel">
@@ -311,6 +389,17 @@ export function App() {
             </div>
             <span className="pulse">{busy ? 'working' : 'online'}</span>
           </div>
+
+          {selectedModelInfo && (
+            <div className="modelInspector">
+              <h3>Selected model</h3>
+              <dl>
+                <div><dt>Created</dt><dd>{formatDate(selectedModelInfo.created_at)}</dd></div>
+                <div><dt>Vocabulary</dt><dd>{selectedModelInfo.vocab_size || '—'}</dd></div>
+                <div><dt>Status</dt><dd>{selectedModelInfo.loaded ? 'Loaded in runtime' : 'Cold storage'}</dd></div>
+              </dl>
+            </div>
+          )}
 
           <div className="graphBox">
             {graphEdges.length === 0 && <div className="empty">Graph is empty until models are loaded.</div>}
@@ -333,5 +422,38 @@ function Metric({ title, value, tone }: { title: string; value: string; tone: 'g
       <span>{title}</span>
       <strong>{value}</strong>
     </article>
+  )
+}
+
+function ResultMeta({
+  title,
+  modelId,
+  runtime,
+}: {
+  title: string
+  modelId: string
+  runtime: PredictResponse['runtime']
+}) {
+  return (
+    <div className="resultMeta">
+      <div>
+        <span>{title}</span>
+        <strong>{modelId}</strong>
+      </div>
+      <div>
+        <span>Latency</span>
+        <strong>{runtime.execution_time_ms?.toFixed(1) ?? '—'} ms</strong>
+      </div>
+      <div>
+        <span>Strategy</span>
+        <strong>{runtime.strategy ?? 'direct'}</strong>
+      </div>
+      {runtime.models_executed?.length ? (
+        <div className="executedModels">
+          <span>Executed</span>
+          <strong>{runtime.models_executed.join(' → ')}</strong>
+        </div>
+      ) : null}
+    </div>
   )
 }
