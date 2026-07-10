@@ -23,6 +23,8 @@ class TrainingMetrics:
     mean_abs_w: float
     num_active_neurons: int
     timestamp: Optional[float] = None
+    energy: float = 0.0
+    delta_energy: float = 0.0
 
 
 class LiveMonitor:
@@ -69,7 +71,9 @@ class LiveMonitor:
             mean_w_fast=float(brain.mean_abs_w_fast()),
             mean_abs_w=float(brain.mean_abs_w()),
             num_active_neurons=int(brain.a.sum()),
-            timestamp=time.time()
+            timestamp=time.time(),
+            energy=float(getattr(brain, "energy", 0.0)),
+            delta_energy=float(getattr(brain, "delta_energy", 0.0)),
         )
 
         self.metrics_history.append(metrics)

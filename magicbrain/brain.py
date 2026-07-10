@@ -59,7 +59,8 @@ class TextBrain:
     """
 
     def __init__(self, genome: str, vocab_size: int, seed_override: int | None = None,
-                 use_act: bool = False):
+                 use_act: bool = False, track_energy: bool = False,
+                 energy_window: int = 200, debt_max: float = 0.0):
         """Initialize the SNN from a genome string.
 
         Args:
@@ -68,6 +69,15 @@ class TextBrain:
             seed_override: If set, overrides the genome-encoded random seed.
             use_act: If True, use ACT-compensated arithmetic from Balansis
                 for numerically stable weight updates and softmax.
+            track_energy: If True, compute the Hopfield energy of each learned
+                state and drive a Survival/Debt-hook (structural plasticity in
+                response to energy debt). Off by default: behaviour is then
+                byte-identical to before. See docs/REFLEXIVE_VERTICAL_SEAMS.md
+                (шов 3).
+            energy_window: Sliding-window length (steps) over which cumulative
+                energy change (ΔE) is summed into "debt".
+            debt_max: Debt threshold; when the windowed sum of ΔE exceeds it,
+                structural plasticity fires and the learning rate is lowered.
         """
         self.genome_str = genome
         self.p = decode_genome(genome)
@@ -147,6 +157,22 @@ class TextBrain:
 
         self.step = 0
 
+        # Seam L2 (energy → learning): Hopfield energy as an online observable
+        # and a Survival/Debt control signal. Opt-in; default keeps behaviour
+        # identical (energy_fn is None, lr_penalty is 1.0).
+        self.track_energy = bool(track_energy)
+        self.energy = 0.0
+        self.delta_energy = 0.0
+        self.energy_window = int(energy_window)
+        self.debt_max = float(debt_max)
+        self._lr_penalty = 1.0
+        self._prune_count = 0
+        self._debt_buffer: list[float] = []
+        self._energy_fn = None
+        if self.track_energy:
+            from .neurogenesis.energy import EnergyFunction
+            self._energy_fn = EnergyFunction(use_act=use_act)
+
     def _enforce_ei_signs(self) -> None:
         """Enforce excitatory/inhibitory sign constraints on synaptic weights.
 
@@ -225,6 +251,48 @@ class TextBrain:
         self.dopamine = sigmoid(gain * adv + bias)
 
         return adv
+
+    def _hopfield_energy(self) -> float:
+        """Hopfield energy E(s) = -½ sᵀWs - θᵀs + λ‖s‖₁ of the current spike state.
+
+        Wires the neurogenesis ``EnergyFunction`` (sparse edge-list mode) into
+        the online learning loop, so the substrate's self-consistency becomes
+        an observable and a control signal rather than a separate offline
+        quantity. Uses the current spikes ``a``, effective weights and
+        thresholds. See docs/REFLEXIVE_VERTICAL_SEAMS.md (шов 3).
+        """
+        return float(self._energy_fn.energy(
+            self.a, self._effective_w(), self.theta, src=self.src, dst=self.dst
+        ))
+
+    def _track_energy_step(self, e_before: float, did_prune: bool) -> None:
+        """Update energy observables and apply the Survival/Debt-hook.
+
+        ``delta_energy`` is the change in the learned state's Hopfield energy
+        across this learning step (imprinting a pattern should lower it). ΔE is
+        accumulated over ``energy_window`` steps; when the window's net energy
+        debt exceeds ``debt_max`` the network answers with structural
+        plasticity (an extra prune/rewire if none happened this step) and a
+        temporary learning-rate reduction, then the debt window resets. When
+        energy is stable or relaxing, the learning rate recovers toward 1.0.
+        """
+        e_after = self._hopfield_energy()
+        self.delta_energy = float(e_after - e_before)
+        self.energy = float(e_after)
+
+        self._debt_buffer.append(self.delta_energy)
+        if len(self._debt_buffer) > self.energy_window:
+            self._debt_buffer = self._debt_buffer[-self.energy_window:]
+
+        if len(self._debt_buffer) >= self.energy_window:
+            debt = float(sum(self._debt_buffer))
+            if debt > self.debt_max:
+                if not did_prune:
+                    self._prune_and_rewire()
+                self._lr_penalty = max(0.5, self._lr_penalty * 0.9)
+                self._debt_buffer.clear()
+            else:
+                self._lr_penalty = min(1.0, self._lr_penalty / 0.9)
 
     def forward(self, token_id: int) -> np.ndarray:
         """Perform one forward pass: input token -> output probability distribution.
@@ -377,6 +445,8 @@ class TextBrain:
             idx_by_delay.append(np.where(self.delay == d)[0].astype(np.int32))
         self.idx_by_delay = idx_by_delay
 
+        self._prune_count += 1
+
     def damage_edges(self, frac: float = 0.2) -> None:
         """Zero out a random fraction of synaptic weights (lesion experiment).
 
@@ -424,7 +494,9 @@ class TextBrain:
 
         adv = self._update_modulators(loss)
 
-        lr = float(self.p["lr"])
+        e_before = self._hopfield_energy() if self.track_energy else 0.0
+
+        lr = float(self.p["lr"]) * self._lr_penalty
         lr_out = lr * self.lr_out_mul
         lr_rec = lr * self.lr_rec_mul
 
@@ -467,8 +539,12 @@ class TextBrain:
         self.theta += (float(self.p["homeo"]) * (self.a - self.target_rate)).astype(np.float32)
 
         prune_every = int(self.p["prune_every"])
-        if prune_every > 0 and (self.step % prune_every) == 0:
+        did_prune = prune_every > 0 and (self.step % prune_every) == 0
+        if did_prune:
             self._prune_and_rewire()
+
+        if self.track_energy:
+            self._track_energy_step(e_before, did_prune=did_prune)
 
         return loss
 

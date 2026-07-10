@@ -68,6 +68,13 @@ def main():
     monitor_parser.add_argument("--out", type=str, default="model.npz")
     monitor_parser.add_argument("--metrics", type=str, default="metrics.json",
                                help="Output file for metrics")
+    monitor_parser.add_argument("--track-energy", action="store_true",
+                               help="Wire Hopfield energy into learning: log energy/ΔE "
+                                    "and enable the Survival/Debt-hook (шов 3)")
+    monitor_parser.add_argument("--energy-window", type=int, default=200,
+                               help="Sliding-window length for energy-debt accumulation")
+    monitor_parser.add_argument("--debt-max", type=float, default=0.0,
+                               help="Energy-debt threshold that triggers structural plasticity")
 
     # TRAIN-DISTRIBUTED
     dist_parser = subparsers.add_parser("train-distributed", help="Distributed training with FedAvg")
@@ -227,7 +234,8 @@ def main():
 
         print(f"Creating brain with genome: {args.genome}")
         stoi, itos = build_vocab(text)
-        brain = TextBrain(args.genome, len(stoi))
+        brain = TextBrain(args.genome, len(stoi), track_energy=args.track_energy,
+                          energy_window=args.energy_window, debt_max=args.debt_max)
 
         # Create monitor
         monitor = LiveMonitor(log_every=100)
