@@ -30,6 +30,7 @@ class NeuralDigitalTwin:
         use_stdp: bool = False,
         initial_mastery: Optional[Dict[str, float]] = None,
         use_act: bool = False,
+        observation_gain: float = 0.4,
     ):
         """
         Create Neural Digital Twin for a student.
@@ -73,6 +74,11 @@ class NeuralDigitalTwin:
 
         # Mastery scores (topic_id -> mastery level 0-1)
         self.mastery_scores: Dict[str, float] = initial_mastery or {}
+
+        # Assimilation rate for KB mastery observations (шов 6): the twin folds
+        # the source-of-truth score as belief += α·(observation − belief),
+        # matching KnowledgeBaseAI's own mastery-update α (0.4).
+        self.observation_gain = float(observation_gain)
 
         # Learning history
         self.learning_events: List[Dict] = []
@@ -441,6 +447,8 @@ class NeuralDigitalTwin:
             except (ValueError, TypeError):
                 timestamp = datetime.now()
 
+        mastery_surprise = None
+
         # Process based on event type
         if event_type == "answer_submitted" and topic_id and topic_id in self.topic_neurons:
             # Update mastery based on correctness and difficulty
@@ -484,6 +492,24 @@ class NeuralDigitalTwin:
             self.mastery_scores[topic_id] = float(new_mastery)
             self.last_practice[topic_id] = timestamp
 
+        elif event_type in ("mastery_observed", "student_progress_updated") and topic_id:
+            # L4→L2 weld (шов 6): fold KnowledgeBaseAI's mastery score as an
+            # OBSERVATION rather than recomputing it. The twin does not own
+            # mastery (KB is source of truth); it assimilates the score and
+            # models the dynamics via belief += α·(observation − belief) — the
+            # same self-correction equation as KB's mastery_update, now nested:
+            # the L4 belief becomes the L2 observation. ``mastery_surprise`` =
+            # observation − prior is the residual that also feeds metacognition.
+            if topic_id not in self.topic_neurons:
+                self.register_topic(topic_id, topic_id)
+            observed = float(np.clip(event.get("score", event.get("observation", 0.0)), 0.0, 1.0))
+            prior = self.mastery_scores.get(topic_id, 0.0)
+            alpha = float(event.get("alpha", self.observation_gain))
+            mastery_surprise = observed - prior
+            new_mastery = float(np.clip(prior + alpha * mastery_surprise, 0.0, 1.0))
+            self.mastery_scores[topic_id] = new_mastery
+            self.last_practice[topic_id] = timestamp
+
         # Always append to learning_events
         learning_event = {
             "timestamp": timestamp,
@@ -493,6 +519,8 @@ class NeuralDigitalTwin:
             "response_time_ms": response_time_ms,
             "difficulty": difficulty,
         }
+        if mastery_surprise is not None:
+            learning_event["mastery_surprise"] = float(mastery_surprise)
         self.learning_events.append(learning_event)
         self.last_updated = datetime.now()
 
@@ -500,11 +528,14 @@ class NeuralDigitalTwin:
         cognitive_prediction = self._build_cognitive_prediction(topic_id)
         neural_metrics = self.get_cognitive_state().get("neural_metrics", {})
 
-        return {
+        result = {
             "cognitive_prediction": cognitive_prediction,
             "neural_metrics": neural_metrics,
             "mastery_scores": dict(self.mastery_scores),
         }
+        if mastery_surprise is not None:
+            result["mastery_surprise"] = float(mastery_surprise)
+        return result
 
     def _build_cognitive_prediction(self, topic_id: Optional[str] = None) -> dict:
         """
