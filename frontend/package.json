@@ -1,7 +1,9 @@
 {
   "name": "magicbrain-dashboard",
   "version": "0.1.0",
+  "description": "React/Vite dashboard for MagicBrain research and service visualization.",
   "private": true,
+  "license": "AGPL-3.0-only",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 3000",
@@ -20,4 +22,3 @@
     "@types/react-dom": "latest"
   }
 }
-

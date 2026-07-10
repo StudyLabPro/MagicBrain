@@ -119,9 +119,11 @@ Energy-based convergence theorem for SNN Hopfield dynamics — **21 theorems, 0 
 **Install**: `pip install magicbrain[platform]` for full platform
 
 ### 📚 Documentation
-- `PROJECT_COMPLETE.md` - Complete project summary
+- `README.md` - Current project overview
 - `PLATFORM_VISION.md` - Vision and roadmap
-- `PHASE1_COMPLETION.md`, `PHASE2_SUMMARY.md`, `PHASE3_COMPLETE.md`
+- `docs/FORMAL_VERIFICATION.md` - formal verification notes
+- `api/README_API.md` - API guide
+- `formal/README.md` - Lean4 formalization guide
 - `magicbrain/platform/README.md` - Platform guide
 - Working examples in `examples/platform/`
 

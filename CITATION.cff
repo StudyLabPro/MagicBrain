@@ -1,0 +1,12 @@
+cff-version: 1.2.0
+message: "If you use MagicBrain, please cite it using this metadata."
+title: "MagicBrain"
+type: software
+authors:
+  - family-names: "Tikhonov"
+    given-names: "Andrey"
+    alias: "Тихонов Андрей"
+email: "uwt@xteam.pro"
+repository-code: "https://github.com/XTeam-Pro/MagicBrain"
+license: "AGPL-3.0-only"
+date-released: "2026-07-10"

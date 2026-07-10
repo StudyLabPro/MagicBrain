@@ -5,12 +5,12 @@
 ![Tests](https://img.shields.io/badge/tests-237%20passed-brightgreen.svg)
 ![Coverage](https://img.shields.io/badge/coverage-90%25+-brightgreen.svg)
 ![Lean4](https://img.shields.io/badge/Lean4-21%20theorems-blueviolet.svg)
-![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)
+![License](https://img.shields.io/badge/license-AGPL--3.0--only%20%2B%20Commercial-blue.svg)
 ![MAGIC Level](https://img.shields.io/badge/MAGIC-Level%202%20MetaBrain-orange.svg)
 
 **Универсальная платформа для гетерогенных и гибридных нейросетевых архитектур**
 
-[Документация](./PROJECT_COMPLETE.md) | [Changelog](./CHANGELOG.md) | [Formal Proofs](./formal/README.md) | [API Docs](./api/README_API.md)
+[Changelog](./CHANGELOG.md) | [Platform Vision](./PLATFORM_VISION.md) | [Formal Proofs](./formal/README.md) | [API Docs](./api/README_API.md) | [Licensing](./LICENSING.md)
 
 ---
 
@@ -278,7 +278,7 @@ Base-4 строка 24+ символов. Каждая позиция детер
 |---------|----------|
 | Версия | 0.7.1 (Lean4 Formal Verification Edition) |
 | Python | 3.9, 3.10, 3.11, 3.12 |
-| Лицензия | Apache 2.0 |
+| Лицензия | AGPL-3.0-only + Commercial |
 | Python-модулей | 88 (magicbrain/) + 16 (api/) |
 | Тестовых файлов | 34 |
 | Passed тестов | 237+ |
@@ -321,11 +321,19 @@ Applied:                 StudyNinja-API   <- circuit breaker -> /health
 
 ---
 
-## Лицензия
+## Лицензия и governance
 
-**Apache License 2.0** — см. [LICENSE](./LICENSE).
+MagicBrain распространяется по дуальной модели:
 
-Коммерческое использование: [COMMERCIAL_LICENSE.md](./COMMERCIAL_LICENSE.md).
+- [LICENSE](./LICENSE): AGPL-3.0-only
+- [COMMERCIAL_LICENSE.md](./COMMERCIAL_LICENSE.md): коммерческие проприетарные условия
+- [LICENSING.md](./LICENSING.md): выбор open-source или коммерческого маршрута
+- [CLA.md](./CLA.md), [CONTRIBUTING.md](./CONTRIBUTING.md), [SECURITY.md](./SECURITY.md): правила участия и ответственного раскрытия
+- [PATENTS.md](./PATENTS.md), [TRADEMARKS.md](./TRADEMARKS.md), [CITATION.cff](./CITATION.cff): IP-boundaries, бренды и цитирование
+
+Патентно-чувствительные материалы по нейрогенезу, fitness/tuning,
+приватным датасетам, промптам и telemetry не должны публиковаться до прохождения
+соответствующих gates.
 
 ---
 
