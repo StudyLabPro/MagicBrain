@@ -32,6 +32,9 @@ def main():
     train_parser.add_argument("--steps", type=int, default=10000)
     train_parser.add_argument("--out", type=str, default="model.npz", help="Output model path")
     train_parser.add_argument("--load", type=str, help="Resume from existing model path")
+    train_parser.add_argument("--use-act", action="store_true",
+                              help="Use ACT-compensated arithmetic (Balansis) for numerically "
+                                   "stable long training runs (шов 2)")
 
     # SAMPLE
     sample_parser = subparsers.add_parser("sample", help="Sample text from model")
@@ -75,6 +78,8 @@ def main():
                                help="Sliding-window length for energy-debt accumulation")
     monitor_parser.add_argument("--debt-max", type=float, default=0.0,
                                help="Energy-debt threshold that triggers structural plasticity")
+    monitor_parser.add_argument("--use-act", action="store_true",
+                               help="Use ACT-compensated arithmetic (Balansis) for stability (шов 2)")
 
     # TRAIN-DISTRIBUTED
     dist_parser = subparsers.add_parser("train-distributed", help="Distributed training with FedAvg")
@@ -139,7 +144,7 @@ def main():
         else:
             print(f"Creating new brain with genome: {args.genome}")
             stoi, itos = build_vocab(text)
-            brain = TextBrain(args.genome, len(stoi))
+            brain = TextBrain(args.genome, len(stoi), use_act=args.use_act)
 
         print("Starting training...")
         train_loop(brain, text, stoi, steps=args.steps)
@@ -234,7 +239,8 @@ def main():
 
         print(f"Creating brain with genome: {args.genome}")
         stoi, itos = build_vocab(text)
-        brain = TextBrain(args.genome, len(stoi), track_energy=args.track_energy,
+        brain = TextBrain(args.genome, len(stoi), use_act=args.use_act,
+                          track_energy=args.track_energy,
                           energy_window=args.energy_window, debt_max=args.debt_max)
 
         # Create monitor

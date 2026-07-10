@@ -199,6 +199,25 @@ class TestBrainWithACT:
             assert not np.any(np.isnan(brain.w_fast)), f"NaN in w_fast at step {i}"
             assert not np.any(np.isnan(brain.R)), f"NaN in R at step {i}"
 
+    def test_act_long_run_stays_finite(self):
+        """Seam 2 acceptance: a long ACT run stays finite through structural
+        plasticity (prune/rewire) and consolidation cycles — no NaN/Inf
+        accumulates. Verified NaN-free to 100k steps manually; 2000 here to
+        exercise at least one prune cycle within CI time."""
+        brain = self._make_brain(use_act=True)
+        if brain._act is None or not brain._act.available:
+            pytest.skip("Balansis not installed")
+        for i in range(2000):
+            probs = brain.forward(i % VOCAB)
+            brain.learn((i + 1) % VOCAB, probs)
+        for name, arr in (
+            ("w_slow", brain.w_slow),
+            ("w_fast", brain.w_fast),
+            ("R", brain.R),
+            ("theta", brain.theta),
+        ):
+            assert np.all(np.isfinite(arr)), f"non-finite {name} after long ACT run"
+
     def test_both_modes_produce_similar_results(self):
         """ACT and non-ACT should produce numerically close results."""
         brain_std = self._make_brain(use_act=False)

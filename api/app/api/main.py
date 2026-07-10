@@ -38,6 +38,37 @@ async def health_check():
     }
 
 
+# --- MAGIC reflexive-vertical wiring (optional, gated by MAGIC_ENABLED) ---
+_magic_bus = None
+_magic_twins = None
+
+
+@app.on_event("startup")
+async def _wire_magic_vertical() -> None:
+    """Wire the twin service onto the MAGIC bus (шов 6) when MAGIC_ENABLED.
+
+    Fully optional: if the ``studyninja_magic`` SDK is absent, MAGIC is disabled,
+    or no broker is reachable, this is a silent no-op — the service runs standalone.
+    """
+    global _magic_bus, _magic_twins
+    try:
+        from studyninja_magic import NullEventBus, event_bus_from_env
+        from magicbrain.integration.magic_wiring import (
+            default_twin_registry,
+            wire_twin_service,
+        )
+    except Exception:  # pragma: no cover - SDK optional
+        return
+
+    bus = event_bus_from_env()
+    if isinstance(bus, NullEventBus):
+        return
+    await bus.connect()
+    _magic_twins, get_twin = default_twin_registry()
+    await wire_twin_service(bus, get_twin, publish_substrate_on_update=True)
+    _magic_bus = bus
+
+
 # API v1 routes
 app.include_router(
     models.router,
