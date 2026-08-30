@@ -5,7 +5,7 @@
 ![Tests](https://img.shields.io/badge/tests-237%20passed-brightgreen.svg)
 ![Coverage](https://img.shields.io/badge/coverage-90%25+-brightgreen.svg)
 ![Lean4](https://img.shields.io/badge/Lean4-21%20theorems-blueviolet.svg)
-![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)
+![License](https://img.shields.io/badge/license-AGPL--3.0%20%2B%20Commercial-blue.svg)
 ![MAGIC Level](https://img.shields.io/badge/MAGIC-Level%202%20MetaBrain-orange.svg)
 
 **Универсальная платформа для гетерогенных и гибридных нейросетевых архитектур**
@@ -278,7 +278,7 @@ Base-4 строка 24+ символов. Каждая позиция детер
 |---------|----------|
 | Версия | 0.7.1 (Lean4 Formal Verification Edition) |
 | Python | 3.9, 3.10, 3.11, 3.12 |
-| Лицензия | Apache 2.0 |
+| Лицензия | AGPL-3.0 + Commercial |
 | Python-модулей | 88 (magicbrain/) + 16 (api/) |
 | Тестовых файлов | 34 |
 | Passed тестов | 237+ |
@@ -323,7 +323,7 @@ Applied:                 StudyNinja-API   <- circuit breaker -> /health
 
 ## Лицензия
 
-**Apache License 2.0** — см. [LICENSE](./LICENSE).
+Двойное лицензирование: **AGPL-3.0** — см. [LICENSE](./LICENSE) — либо **коммерческая лицензия**, см. [LICENSING.md](./LICENSING.md).
 
 Коммерческое использование: [COMMERCIAL_LICENSE.md](./COMMERCIAL_LICENSE.md).
 
