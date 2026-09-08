@@ -321,8 +321,12 @@ class TextBrain:
         self.step += 1
 
         delayed_now = self.buffers[1].copy()
+        # Shift the delay line by *value*: rebinding the list entries here
+        # (``buffers[d] = buffers[d + 1]``) aliases the arrays instead of
+        # rotating them, and after four steps every delay group would share a
+        # single buffer — collapsing all axonal delays to one.
         for d in range(1, 5):
-            self.buffers[d] = self.buffers[d + 1]
+            self.buffers[d][:] = self.buffers[d + 1]
         self.buffers[5].fill(0)
 
         bd = float(self.p["buf_decay"])
