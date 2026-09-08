@@ -119,19 +119,22 @@ class TestAsyncOrchestrator:
 
         input_data = [0, 1, 2]
 
-        # Parallel execution
+        # The baseline is measured on this machine, right now: the same four
+        # models called one after another. Comparing against it instead of
+        # against a fixed number of milliseconds keeps the test meaningful when
+        # the host is busy with unrelated work — a loaded host slows both sides.
+        start = time.time()
+        for node_id in list(orchestrator._nodes):
+            orchestrator._nodes[node_id].model.forward(input_data)
+        time_serial = time.time() - start
+
         start = time.time()
         result_par = orchestrator.execute(input_data, ExecutionStrategy.PARALLEL)
         time_par = time.time() - start
 
-        # If truly parallel: ~50ms (all run concurrently)
-        # If sequential: 4 * 50ms = 200ms
-        # We expect parallel time to be close to single model time
-        # Allow 2x overhead for async machinery
-        max_expected_time = delay_sec * 2.0  # 100ms
-
-        assert time_par < max_expected_time, \
-            f"Parallel execution took {time_par:.3f}s, expected <{max_expected_time:.3f}s (models running sequentially?)"
+        # Serial is num_models x delay of pure sleeping; parallel overlaps it.
+        assert time_par < time_serial * 0.6, \
+            f"Parallel {time_par:.3f}s vs serial {time_serial:.3f}s (models running sequentially?)"
 
         # All models should have executed
         assert len(result_par.outputs) == num_models
