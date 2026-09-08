@@ -18,6 +18,7 @@ from magicbrain.platform import ExecutionStrategy, ModelOrchestrator, ModelRegis
 from magicbrain.sampling import apply_sampling_filters
 
 from .config import settings
+from .ids import validate_model_id
 
 
 @dataclass
@@ -48,7 +49,9 @@ class RuntimeService:
         self._load_manifest()
 
     def model_path(self, model_id: str) -> Path:
-        return self.storage_path / f"{model_id}.npz"
+        # Second line of defence: the routes validate too, but the runtime
+        # service is also called from background jobs and from other services.
+        return self.storage_path / f"{validate_model_id(model_id)}.npz"
 
     def list_storage_models(self) -> list[dict[str, Any]]:
         self.storage_path.mkdir(parents=True, exist_ok=True)

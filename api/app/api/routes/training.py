@@ -8,6 +8,7 @@ from pathlib import Path
 import uuid
 
 from ...core.config import settings
+from ...core.ids import require_model_id, validate_model_id
 
 router = APIRouter()
 
@@ -57,7 +58,7 @@ def train_model_task(job_id: str, model_id: str, text: str, steps: int, learning
         training_jobs[job_id]["status"] = "running"
 
         # Load model
-        model_path = Path(settings.MODEL_STORAGE_PATH) / f"{model_id}.npz"
+        model_path = Path(settings.MODEL_STORAGE_PATH) / f"{validate_model_id(model_id)}.npz"
         if not model_path.exists():
             training_jobs[job_id]["status"] = "failed"
             training_jobs[job_id]["message"] = "Model not found"
@@ -119,7 +120,8 @@ async def start_training(request: TrainingRequest, background_tasks: BackgroundT
         Job status
     """
     # Check model exists
-    model_path = Path(settings.MODEL_STORAGE_PATH) / f"{request.model_id}.npz"
+    model_id = require_model_id(request.model_id)
+    model_path = Path(settings.MODEL_STORAGE_PATH) / f"{model_id}.npz"
     if not model_path.exists():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

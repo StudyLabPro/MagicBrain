@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 
 from ...core.config import settings
+from ...core.ids import require_model_id
 from ...core.runtime import RuntimeModelNotFoundError, get_runtime_service
 
 router = APIRouter()
@@ -143,6 +144,7 @@ async def get_model(model_id: str):
     Returns:
         Model information
     """
+    model_id = require_model_id(model_id)
     model_path = Path(settings.MODEL_STORAGE_PATH) / f"{model_id}.npz"
 
     if not model_path.exists():
@@ -196,8 +198,9 @@ async def create_model(request: CreateModelRequest):
     from magicbrain import TextBrain
     from magicbrain.io import save_model
 
-    # Generate model ID if not provided
-    model_id = request.model_id or str(uuid.uuid4())
+    # Generate model ID if not provided. A caller-supplied id becomes a file
+    # name, so it is validated before it touches the filesystem.
+    model_id = require_model_id(request.model_id) if request.model_id else str(uuid.uuid4())
 
     # Check if model already exists
     model_path = Path(settings.MODEL_STORAGE_PATH) / f"{model_id}.npz"
@@ -235,6 +238,7 @@ async def create_model(request: CreateModelRequest):
 
 @router.post("/{model_id}/register")
 async def register_model_runtime(model_id: str, request: ModelRuntimeAction):
+    model_id = require_model_id(model_id)
     runtime = get_runtime_service()
     try:
         return runtime.register_model(model_id, auto_load=request.auto_load)
@@ -247,12 +251,14 @@ async def register_model_runtime(model_id: str, request: ModelRuntimeAction):
 
 @router.delete("/{model_id}/register", status_code=status.HTTP_204_NO_CONTENT)
 async def unregister_model_runtime(model_id: str):
+    model_id = require_model_id(model_id)
     get_runtime_service().unload(model_id, unregister=True)
     return None
 
 
 @router.post("/{model_id}/load")
 async def load_model_runtime(model_id: str, force_reload: bool = False):
+    model_id = require_model_id(model_id)
     runtime = get_runtime_service()
     try:
         model = runtime.load(model_id, force_reload=force_reload)
@@ -273,6 +279,7 @@ async def load_model_runtime(model_id: str, force_reload: bool = False):
 
 @router.delete("/{model_id}/unload", status_code=status.HTTP_204_NO_CONTENT)
 async def unload_model_runtime(model_id: str, unregister: bool = False):
+    model_id = require_model_id(model_id)
     get_runtime_service().unload(model_id, unregister=unregister)
     return None
 
@@ -285,6 +292,7 @@ async def delete_model(model_id: str):
     Args:
         model_id: Model to delete
     """
+    model_id = require_model_id(model_id)
     model_path = Path(settings.MODEL_STORAGE_PATH) / f"{model_id}.npz"
 
     if not model_path.exists():

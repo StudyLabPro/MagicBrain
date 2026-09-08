@@ -7,6 +7,7 @@ from typing import List, Dict, Optional
 from pathlib import Path
 
 from ...core.config import settings
+from ...core.ids import require_model_id
 
 router = APIRouter()
 
@@ -50,6 +51,7 @@ async def get_diagnostics(model_id: str):
     """
     from magicbrain.io import load_model
 
+    model_id = require_model_id(model_id)
     model_path = Path(settings.MODEL_STORAGE_PATH) / f"{model_id}.npz"
     if not model_path.exists():
         raise HTTPException(
@@ -83,6 +85,7 @@ async def get_weight_stats(model_id: str):
     from magicbrain.io import load_model
     from magicbrain.diagnostics import SynapticAnalyzer
 
+    model_id = require_model_id(model_id)
     model_path = Path(settings.MODEL_STORAGE_PATH) / f"{model_id}.npz"
     if not model_path.exists():
         raise HTTPException(
@@ -118,6 +121,7 @@ async def get_activity_metrics(model_id: str):
     from magicbrain.io import load_model
     import numpy as np
 
+    model_id = require_model_id(model_id)
     model_path = Path(settings.MODEL_STORAGE_PATH) / f"{model_id}.npz"
     if not model_path.exists():
         raise HTTPException(
