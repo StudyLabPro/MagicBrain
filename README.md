@@ -1,6 +1,6 @@
 # MagicBrain Platform
 
-![Version](https://img.shields.io/badge/version-0.7.1-blue.svg)
+![Version](https://img.shields.io/badge/version-0.8.0-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.9+-green.svg)
 ![Tests](https://img.shields.io/badge/tests-237%20passed-brightgreen.svg)
 ![Coverage](https://img.shields.io/badge/coverage-90%25+-brightgreen.svg)
@@ -16,7 +16,7 @@
 
 ## О проекте
 
-**MagicBrain** — исследовательский сервис уровня **MAGIC Level 2 (MetaBrain)** в экосистеме [StudyNinja-Eco](https://github.com/XTeam-Pro/StudyNinja-Eco). Реализует живую AGI-память через биологически правдоподобные спайковые нейронные сети (SNN), геномное кодирование, нейрогенез и цифровые двойники студентов.
+**MagicBrain** — исследовательская платформа спайковых нейронных сетей (SNN) уровня **MAGIC Level 2 (MetaBrain)**. Архитектура сети задаётся компактной геномной строкой и выращивается процессом развития, а не собирается вручную; поверх этого работает оркестрация разнородных моделей (SNN, DNN, Transformer, CNN, RNN) в едином рантайме.
 
 ### Ключевые компоненты
 
@@ -43,7 +43,7 @@ pip install magicbrain[all]          # всё, включая JAX и dev-инс�
 ### Разработка
 
 ```bash
-git clone https://github.com/XTeam-Pro/MagicBrain.git
+git clone https://github.com/StudyLabPro/MagicBrain.git
 cd MagicBrain
 pip install -e ".[dev]"
 pytest
@@ -276,7 +276,7 @@ Base-4 строка 24+ символов. Каждая позиция детер
 
 | Метрика | Значение |
 |---------|----------|
-| Версия | 0.7.1 (Lean4 Formal Verification Edition) |
+| Версия | 0.8.0 (Lean4 Formal Verification Edition) |
 | Python | 3.9, 3.10, 3.11, 3.12 |
 | Лицензия | AGPL-3.0-only + Commercial |
 | Python-модулей | 88 (magicbrain/) + 16 (api/) |
@@ -314,7 +314,7 @@ Base-4 строка 24+ символов. Каждая позиция детер
 ```
 Level 4 (MetaKnowledge): KnowledgeBaseAI  <- синхронизация освоения тем
 Level 3 (MetaAgent):     xteam-agents     <- когнитивные модели студентов
-Level 2 (MetaBrain):     MagicBrain       <- живая AGI-память (этот проект)
+Level 2 (MetaBrain):     MagicBrain       <- SNN-субстрат и оркестрация моделей (этот проект)
 Level 1 (MetaBalansis):  Balansis         <- ACT-компенсированная арифметика
 Applied:                 StudyNinja-API   <- circuit breaker -> /health
 ```
@@ -350,4 +350,4 @@ Code style: Ruff, type hints обязательны, docstrings в Google style.
 
 **MagicBrain — биологически правдоподобная память для AGI-систем**
 
-Часть [StudyNinja-Eco](https://github.com/XTeam-Pro/StudyNinja-Eco) | MAGIC Level 2: MetaBrain
+MAGIC Level 2: MetaBrain

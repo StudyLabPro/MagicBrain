@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "magicbrain"
-version = "0.7.1"
+version = "0.8.0"
 description = "Universal platform for heterogeneous and hybrid neural network architectures"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -91,9 +91,9 @@ all = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/XTeam-Pro/MagicBrain"
-Repository = "https://github.com/XTeam-Pro/MagicBrain"
-Documentation = "https://github.com/XTeam-Pro/MagicBrain/tree/main/docs"
+Homepage = "https://github.com/StudyLabPro/MagicBrain"
+Repository = "https://github.com/StudyLabPro/MagicBrain"
+Documentation = "https://github.com/StudyLabPro/MagicBrain/tree/main/docs"
 
 [project.scripts]
 magicbrain = "magicbrain.cli:main"

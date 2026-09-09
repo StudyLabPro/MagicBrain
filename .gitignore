@@ -42,3 +42,6 @@ lake-packages/
 lake-manifest.json
 
 frontend/node_modules/
+
+# Runtime model artifacts
+models/
