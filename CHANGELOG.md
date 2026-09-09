@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.8.0] — 2026-09-09 — Public release under AGPL-3.0
+
+### Changed
+- **Licensing corrected.** `0.7.1` on PyPI shipped an Apache-2.0 `LICENSE` file
+  under MIT package metadata while the repository carried AGPL-3.0-only. This
+  release is consistent everywhere: AGPL-3.0-only plus the separate commercial
+  route described in `LICENSING.md`. Rights already granted with `0.7.1` are not
+  affected — they stand for that release.
+- `COMMERCIAL_LICENSE.md`, `LICENSING.md`, `PATENTS.md` and `TRADEMARKS.md` now
+  ship inside the distribution, so the dual model is visible to anyone who only
+  ever sees the package.
+- Project metadata points at `StudyLabPro/MagicBrain`; the previous URLs pointed
+  at an organisation that no longer hosts the repository.
+- README states what the library does instead of describing it as live AGI
+  memory with student digital twins.
+
+### Removed
+- Patent application drafts, agent-layer instruction files and the lab host
+  address they carried are out of the tree and out of the history.
+
+---
+
 ## [0.7.1] — 2026-02-18 — Lean4 Formal Verification
 
 ### Added

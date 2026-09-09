@@ -1,0 +1,7 @@
+include LICENSE
+include LICENSING.md
+include COMMERCIAL_LICENSE.md
+include PATENTS.md
+include TRADEMARKS.md
+include CITATION.cff
+include CHANGELOG.md
