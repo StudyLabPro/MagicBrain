@@ -45,3 +45,8 @@ frontend/node_modules/
 
 # Runtime model artifacts
 models/
+
+# Internal agent-layer files — generated per host, never published
+AGENTS.md
+CLAUDE.md
+.agents/
